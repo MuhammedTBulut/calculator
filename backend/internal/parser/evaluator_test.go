@@ -143,3 +143,42 @@ func TestEvaluateSyntaxPositions(t *testing.T) {
 		})
 	}
 }
+
+// TestEvaluateUnknownFunctionPrecision pins the same precision for an
+// unrecognized identifier as TestEvaluateSyntaxPositions pins for a syntax
+// fault: the exact name and the exact byte position of its first character,
+// regardless of where in the expression it appears or what surrounds it.
+func TestEvaluateUnknownFunctionPrecision(t *testing.T) {
+	eval := newEvaluator(t)
+
+	tests := []struct {
+		input    string
+		wantPos  int
+		wantName string
+	}{
+		{input: "foo(4)", wantPos: 0, wantName: "foo"},
+		{input: "1+bar(2)", wantPos: 2, wantName: "bar"},
+		{input: "sqrt(baz(1))", wantPos: 5, wantName: "baz"},
+		{input: "foo(4)+1/0", wantPos: 0, wantName: "foo"},
+		{input: "1/0+foo(4)", wantPos: 4, wantName: "foo"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.input, func(t *testing.T) {
+			_, err := eval.Evaluate(tc.input)
+			var unknownErr *apperror.UnknownFunctionError
+			if !errors.As(err, &unknownErr) {
+				t.Fatalf("Evaluate(%q) error = %v, want *apperror.UnknownFunctionError", tc.input, err)
+			}
+			if unknownErr.Name != tc.wantName {
+				t.Fatalf("Evaluate(%q) name = %q, want %q", tc.input, unknownErr.Name, tc.wantName)
+			}
+			if unknownErr.Position != tc.wantPos {
+				t.Fatalf("Evaluate(%q) position = %d, want %d", tc.input, unknownErr.Position, tc.wantPos)
+			}
+			if !errors.Is(err, apperror.ErrUnknownFunction) {
+				t.Fatalf("Evaluate(%q) does not satisfy errors.Is(err, ErrUnknownFunction)", tc.input)
+			}
+		})
+	}
+}

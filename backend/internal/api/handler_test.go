@@ -131,8 +131,12 @@ func TestCalculate(t *testing.T) {
 			wantStatus: http.StatusUnprocessableEntity, wantCode: api.CodeOverflow},
 		{name: "invalid operand via expression", body: `{"expression":"(0-8)^0.5"}`,
 			wantStatus: http.StatusUnprocessableEntity, wantCode: api.CodeInvalidOperand},
-		{name: "unknown function", body: `{"expression":"foo(4)"}`,
-			wantStatus: http.StatusUnprocessableEntity, wantCode: api.CodeUnknownFunction},
+		// Unknown function names carry the same byte-position precision as a
+		// syntax error, pointing at the identifier rather than the call site.
+		{name: "unknown function at the start of the expression", body: `{"expression":"foo(4)"}`,
+			wantStatus: http.StatusUnprocessableEntity, wantCode: api.CodeUnknownFunction, wantPos: intPtr(0)},
+		{name: "unknown function mid-expression", body: `{"expression":"1+bar(2)"}`,
+			wantStatus: http.StatusUnprocessableEntity, wantCode: api.CodeUnknownFunction, wantPos: intPtr(2)},
 
 		// Syntax errors carry the byte position for the UI underline.
 		{name: "syntax error with position", body: `{"expression":"2++3"}`,
@@ -172,6 +176,21 @@ func TestCalculate(t *testing.T) {
 				t.Fatalf("position = %d, want absent (only syntax errors carry it)", *env.Error.Position)
 			}
 		})
+	}
+}
+
+// The message must name the exact identifier, not a generic "unknown
+// function" — the precision this stage added alongside the position.
+func TestUnknownFunctionMessageNamesTheIdentifier(t *testing.T) {
+	h := newStack(t)
+	rec := do(t, h, jsonRequest(http.MethodPost, "/api/v1/calculate", `{"expression":"1+bogus(2)"}`))
+
+	env := decodeError(t, rec.Body.String())
+	if env.Error.Code != api.CodeUnknownFunction {
+		t.Fatalf("code = %q, want UNKNOWN_FUNCTION", env.Error.Code)
+	}
+	if !strings.Contains(env.Error.Message, `"bogus"`) {
+		t.Fatalf("message = %q, want it to name the identifier", env.Error.Message)
 	}
 }
 

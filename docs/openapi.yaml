@@ -3,9 +3,11 @@ info:
   title: Calculator API
   description: >
     Full-stack calculator backend. Errors use a stable machine-readable code
-    envelope; `position` is present exactly when the code is SYNTAX_ERROR and
-    is a 0-based byte offset into the submitted expression (range
-    [0, len(expression)]; the endpoint means "unexpected end of input").
+    envelope; `position` is present exactly when the code is SYNTAX_ERROR or
+    UNKNOWN_FUNCTION and is a 0-based byte offset into the submitted
+    expression (range [0, len(expression)]; the endpoint means "unexpected
+    end of input"). For UNKNOWN_FUNCTION, `message` also names the exact
+    identifier that was not recognized.
 
 
     Transport policy (applies to every route, not repeated per operation): a
@@ -216,7 +218,6 @@ components:
                     - OVERFLOW
                     - ARITY_MISMATCH
                     - UNKNOWN_OPERATION
-                    - UNKNOWN_FUNCTION
                     - REQUEST_TOO_LARGE
                     - UNSUPPORTED_MEDIA_TYPE
                     - RATE_LIMITED
@@ -231,10 +232,13 @@ components:
               properties:
                 code:
                   type: string
-                  enum: [SYNTAX_ERROR]
+                  enum: [SYNTAX_ERROR, UNKNOWN_FUNCTION]
                 message:
                   type: string
                 position:
                   type: integer
                   minimum: 0
-                  description: 0-based byte offset of the offending character.
+                  description: >-
+                    0-based byte offset of the offending character
+                    (SYNTAX_ERROR) or of the unrecognized identifier's first
+                    character (UNKNOWN_FUNCTION).

@@ -58,3 +58,22 @@ func (e *SyntaxError) Error() string {
 
 // Unwrap makes errors.Is(err, ErrSyntax) hold for every SyntaxError.
 func (e *SyntaxError) Unwrap() error { return ErrSyntax }
+
+// UnknownFunctionError couples ErrUnknownFunction with the offending
+// identifier and its byte position, so the adapter can name exactly which
+// token was invalid and where — the same precision SyntaxError gives
+// malformed syntax, extended to unrecognized function names. Position is
+// 0-based, the byte offset of the identifier's first character.
+type UnknownFunctionError struct {
+	Name     string
+	Position int
+}
+
+// Error implements the error interface.
+func (e *UnknownFunctionError) Error() string {
+	return fmt.Sprintf("unknown function %q at position %d", e.Name, e.Position)
+}
+
+// Unwrap makes errors.Is(err, ErrUnknownFunction) hold for every
+// UnknownFunctionError.
+func (e *UnknownFunctionError) Unwrap() error { return ErrUnknownFunction }
