@@ -7,6 +7,7 @@ package main
 import (
 	"context"
 	"errors"
+	"flag"
 	"log/slog"
 	"net/http"
 	"os"
@@ -69,11 +70,34 @@ func buildHandler(cfg config, logger *slog.Logger) (http.Handler, error) {
 			api.WithCORS(cfg.corsOrigin, handler.Routes()))), nil
 }
 
+// healthcheck probes a running instance and exits non-zero if it is not
+// serving. It exists because the distroless runtime image ships no shell and
+// no curl, so the binary has to be its own container healthcheck.
+func healthcheck(cfg config) int {
+	client := &http.Client{Timeout: 2 * time.Second}
+	resp, err := client.Get("http://127.0.0.1:" + cfg.port + "/health")
+	if err != nil {
+		return 1
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return 1
+	}
+	return 0
+}
+
 func main() {
+	probe := flag.Bool("healthcheck", false, "probe a running server and exit")
+	flag.Parse()
+
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	slog.SetDefault(logger)
 
 	cfg := loadConfig()
+
+	if *probe {
+		os.Exit(healthcheck(cfg))
+	}
 
 	handler, err := buildHandler(cfg, logger)
 	if err != nil {
