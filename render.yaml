@@ -3,16 +3,18 @@
 # to exercise (ADR-004 territory — pick the option that doesn't add
 # infrastructure for its own sake).
 #
-# Both services are Docker web services, mirroring the docker-compose
-# topology as closely as Render's platform allows. Render does not join
-# services on a private Docker network the way Compose does, so the
-# frontend's nginx proxies to the backend's public origin instead of a
-# compose service name — see frontend/Dockerfile.render and
-# frontend/nginx.render.conf.template.
+# Both services are Docker web services, built from the same Dockerfiles
+# docker-compose uses. The frontend image needs one thing compose provides
+# for free — a route to the backend — which it gets here via the
+# BACKEND_ORIGIN env var (frontend/Dockerfile bakes in the compose-network
+# default; this overrides it to the backend service's public origin, since
+# Render does not join services on a private network the way Compose does).
 #
 # The URLs below assume the service names are available on onrender.com; if
 # Render suffixes a name on creation, update BACKEND_ORIGIN / CORS_ORIGIN and
-# redeploy (see docs/deployment.md).
+# redeploy (see docs/deployment.md). render.yaml itself is documentation of
+# the deployed shape — services were created via `render services create`
+# because the CLI has no blueprint-apply command; see docs/deployment.md.
 services:
   - name: sezzle-calculator-api
     type: web
@@ -38,7 +40,7 @@ services:
   - name: sezzle-calculator
     type: web
     runtime: docker
-    dockerfilePath: ./frontend/Dockerfile.render
+    dockerfilePath: ./frontend/Dockerfile
     dockerContext: ./frontend
     plan: free
     envVars:
