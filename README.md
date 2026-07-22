@@ -2,6 +2,14 @@
 
 [![CI](https://github.com/MuhammedTBulut/calculator/actions/workflows/ci.yml/badge.svg)](https://github.com/MuhammedTBulut/calculator/actions/workflows/ci.yml)
 
+**Live demo:** <https://sezzle-calculator.onrender.com>
+(API: <https://sezzle-calculator-api.onrender.com>) — deployed on Render's
+free tier, which spins a service down after 15 minutes idle; the **first**
+request can take about a minute to wake it back up (worst case twice, once
+for the page and once for the first calculation, since the two services
+sleep independently). Full deployment notes, the routing bug the first live
+deploy caught, and rollback steps: [docs/deployment.md](docs/deployment.md).
+
 A full-stack calculator built for the Sezzle take-home assignment. The Go
 service evaluates named operations and infix expressions; the React +
 TypeScript client provides an accessible, responsive calculator UI with
