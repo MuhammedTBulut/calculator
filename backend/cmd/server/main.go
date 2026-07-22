@@ -1,6 +1,7 @@
-// Package main is the composition root: it loads configuration, builds the
-// HTTP server, and owns the process lifecycle (startup and graceful shutdown).
-// All wiring of adapters to the domain happens here and nowhere else.
+// Package main is the composition root: it loads configuration, wires the
+// domain registry, parser, and HTTP adapter together by hand (manual
+// constructor injection), and owns the process lifecycle. All wiring happens
+// here and nowhere else.
 package main
 
 import (
@@ -12,6 +13,10 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/MuhammedTBulut/calculator/backend/internal/api"
+	"github.com/MuhammedTBulut/calculator/backend/internal/calculator"
+	"github.com/MuhammedTBulut/calculator/backend/internal/parser"
 )
 
 // config carries every environment-derived setting.
@@ -37,21 +42,48 @@ func envOr(key, fallback string) string {
 	return fallback
 }
 
+// buildHandler assembles registry → evaluator → HTTP adapter → middleware.
+// Registering a new operation means adding it to this one list — no existing
+// domain file changes (Open/Closed).
+func buildHandler(cfg config, logger *slog.Logger) (http.Handler, error) {
+	registry, err := calculator.NewRegistry(
+		calculator.Add{}, calculator.Subtract{}, calculator.Multiply{},
+		calculator.Divide{}, calculator.Power{}, calculator.Sqrt{},
+		calculator.Percent{},
+	)
+	if err != nil {
+		return nil, err
+	}
+	evaluator, err := parser.NewEvaluator(registry)
+	if err != nil {
+		return nil, err
+	}
+	handler, err := api.NewHandler(registry, evaluator, logger)
+	if err != nil {
+		return nil, err
+	}
+	// Logging wraps recovery so panics are logged with their final 500
+	// status; CORS sits innermost, decorating only real route traffic.
+	return api.WithLogging(logger,
+		api.WithRecovery(logger,
+			api.WithCORS(cfg.corsOrigin, handler.Routes()))), nil
+}
+
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	slog.SetDefault(logger)
 
 	cfg := loadConfig()
 
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /health", func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"status":"ok"}`))
-	})
+	handler, err := buildHandler(cfg, logger)
+	if err != nil {
+		logger.Error("wiring failed", "error", err)
+		os.Exit(1)
+	}
 
 	srv := &http.Server{
 		Addr:    ":" + cfg.port,
-		Handler: mux,
+		Handler: handler,
 		// NOTE: timeouts bound how long a slow or hostile client can hold a
 		// connection; values are deliberately tight for a small JSON API.
 		ReadHeaderTimeout: 5 * time.Second,

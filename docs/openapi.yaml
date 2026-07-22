@@ -1,0 +1,155 @@
+openapi: 3.0.3
+info:
+  title: Calculator API
+  description: >
+    Full-stack calculator backend. Errors use a stable machine-readable code
+    envelope; `position` appears only on SYNTAX_ERROR and is a 0-based byte
+    offset into the submitted expression (range [0, len(expression)]; the
+    endpoint means "unexpected end of input").
+  version: 1.0.0
+servers:
+  - url: /
+paths:
+  /api/v1/calculate:
+    post:
+      summary: Execute one named operation or evaluate an infix expression
+      operationId: calculate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CalculateRequest"
+      responses:
+        "200":
+          description: Successful calculation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CalculateResponse"
+        "400":
+          description: Malformed request (bad JSON, wrong shape, oversized body)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "422":
+          description: Well-formed request whose content fails domain rules
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "500":
+          description: Internal error (details redacted and logged server-side)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+  /api/v1/operations:
+    get:
+      summary: List available operations for UI discovery
+      operationId: listOperations
+      responses:
+        "200":
+          description: Registered operations, sorted by name
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Operation"
+  /health:
+    get:
+      summary: Liveness probe
+      operationId: health
+      responses:
+        "200":
+          description: Service is up
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+components:
+  schemas:
+    CalculateRequest:
+      description: Exactly one of the two request forms.
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required: [operation, operands]
+          properties:
+            operation:
+              type: string
+              example: divide
+            operands:
+              type: array
+              items:
+                type: number
+              example: [10, 2]
+        - type: object
+          additionalProperties: false
+          required: [expression]
+          properties:
+            expression:
+              type: string
+              example: 2+3*4
+    CalculateResponse:
+      type: object
+      additionalProperties: false
+      required: [result]
+      properties:
+        result:
+          type: number
+          example: 12
+    Operation:
+      type: object
+      additionalProperties: false
+      required: [name, arity, symbol]
+      properties:
+        name:
+          type: string
+          example: add
+        arity:
+          type: integer
+          minimum: 1
+          example: 2
+        symbol:
+          type: string
+          example: "+"
+    HealthResponse:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [ok]
+    ErrorEnvelope:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              enum:
+                - INVALID_REQUEST
+                - DIVISION_BY_ZERO
+                - NEGATIVE_SQRT
+                - INVALID_OPERAND
+                - OVERFLOW
+                - ARITY_MISMATCH
+                - UNKNOWN_OPERATION
+                - SYNTAX_ERROR
+                - UNKNOWN_FUNCTION
+                - INTERNAL
+            message:
+              type: string
+            position:
+              type: integer
+              minimum: 0
+              description: Present only for SYNTAX_ERROR; 0-based byte offset.
