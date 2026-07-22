@@ -1,3 +1,12 @@
+> **Status: informal session log, not reproducible evidence.** This is a
+> working record of interactive QA passes run during development; the image
+> paths under `/tmp/` existed only on the machine that produced them and are
+> not part of this repository. For evidence anyone can regenerate —
+> screenshots captured by tests that assert the state first — see
+> [`docs/visual-evidence.md`](docs/visual-evidence.md) and
+> `frontend/e2e/visual-evidence.spec.ts`. This file is kept for the reasoning
+> trail: what was compared, what was found, and why each fix was made.
+
 **Comparison Target**
 
 - Source visual truths: conversation attachments `cropped-result-right-edge.png` (563 × 378 px) and `scientific-overflow-reference.png` (944 × 2048 px).
