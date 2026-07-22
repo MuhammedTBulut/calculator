@@ -64,3 +64,37 @@ JavaScript UTF-16 strings.
 shunting-yard (tokenizer stays lexical), the `-`/`^` precedence with no-pop
 prefix handling, postfix `%` semantics, the consumer-side `Registry` interface
 (domain independence confirmed), and `SyntaxError.Unwrap`.
+
+## Checkpoint 3 — HTTP adapter (Prompt 4, branch `feat/http-adapter`)
+
+- Date: 2026-07-22 · Reviewer: OpenAI Codex (model `gpt-5.6-sol`, Codex CLI 0.145.0)
+- Reviewer verdict: "changes requested — domain/error dependency direction is
+  sound, but the HTTP contract and its enforcement have several concrete gaps."
+  Nine findings: **eight accepted, one rebutted** (the log's first rebuttal).
+
+| # | Sev. | Finding | Resolution |
+|---|------|---------|------------|
+| 1 | High | The contract test left kin-openapi's `Options` nil, so undocumented statuses passed unvalidated — a hypothetical 418 would not have failed the suite; the "headers validated" claim was also false | **Accepted.** `IncludeResponseStatus: true` set; `X-Request-ID` declared on every response in the spec. Request validation deliberately omitted: the suite sends intentionally invalid bodies to exercise 400s (`contract_test.go`) |
+| 2 | High | Pointer DTO fields cannot distinguish absent from JSON `null`, so `{"expression":"1+1","operation":null}` slipped past the XOR shape check as 200 | **Accepted.** `json.RawMessage` fields make presence observable; explicit `null` and wrong types are 400s; all three null variants pinned by tests (`dto.go`, `handler.go`) |
+| 3 | High | `Decoder.More()` reports false at a stray closing brace, silently accepting `{...} }`; read errors discarded, so whitespace padding could evade the body limit | **Accepted.** Trailing check is now a second `Decode` requiring `io.EOF`, with `MaxBytesError` classified from both decode attempts; `{...} }` and whitespace-padding cases pinned |
+| 4 | Med | A syntactically valid JSON number beyond float64 (`1e309`) was misclassified as malformed JSON (400) instead of content outside the domain representation | **Accepted.** Operands decode via `json.Number`; `strconv.ErrRange` maps to 422 `INVALID_OPERAND`, other parse failures stay 400 (`parseOperands`) |
+| 5 | Med | The media-type contract was unenforced: `text/plain` bodies were accepted while the spec declared only `application/json` | **Accepted.** Present-but-wrong Content-Type → enveloped 415 `UNSUPPORTED_MEDIA_TYPE`; absent header treated as JSON — leniency documented in the spec |
+| 6 | Med | Syntax messages echo the parser's Reason, contradicting the stated "canonical message per code" policy; the spec allowed `position` on every code and did not require it for `SYNTAX_ERROR` | **Accepted (policy revised, schema fixed).** The policy now names SYNTAX_ERROR as its one deliberate exception — Reasons are purpose-built client-facing strings, never internal context. Spec uses a `oneOf`: `position` required for SYNTAX_ERROR, forbidden otherwise |
+| 7 | Med | Recovery appended a 500 envelope after a partial response, and the status recorder let a second `WriteHeader` overwrite the logged status — logs could claim 500 where the client got 200 | **Accepted.** First-write-wins recorder; recovery writes the envelope only while the response is unstarted, otherwise abandons the truncated response (guarantee narrowed and documented); partial-write panic test added |
+| 8 | Low | Request IDs missing from panic and unhandled-error logs; browsers could not read the echoed header without `Access-Control-Expose-Headers` | **Accepted.** ID rides the request context into both log sites; CORS exposes `X-Request-ID`; all three pinned by tests |
+| 9 | Low | `NewHandler`'s nil-checks pass a typed nil stored in an interface | **Rebutted.** Reflection-based typed-nil detection is disproportionate for a constructor guarding the common zero-value wiring mistake; a typed nil is a broken implementer contract and surfaces through the recovery middleware as a logged 500 — exactly the documented behavior for programming errors. The doc comment now states this scope precisely |
+
+**Answers adopted from the reviewer's Q&A:** (a) oversized bodies are **413**
+with code `REQUEST_TOO_LARGE` — RFC 9110 defines 413 precisely for this; the
+project's 400/422 rule separates malformed from domain, it does not prohibit
+other transport statuses. The exact 1024-byte limit is now in the spec.
+(b) wrong methods on known routes get an enveloped **405** `METHOD_NOT_ALLOWED`
+with the mandatory `Allow` header (HEAD listed explicitly — Go's GET patterns
+serve it); unknown paths get an enveloped **404** `NOT_FOUND`. Both are
+documented as global transport policy in the spec's info section (OpenAPI 3.0
+has no per-operation home for them) and asserted directly in tests.
+
+**Reviewer agreed with:** adapter-owned syntax symbols, canonical redaction
+for unexpected errors, 400 for malformed/XOR shape errors, 422 for
+empty-operand arity and domain errors, and exact-origin CORS with no grant
+for foreign origins.
