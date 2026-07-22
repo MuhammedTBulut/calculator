@@ -28,9 +28,15 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
   render() {
     if (this.state.hasError) {
       return (
-        <div role="alert">
-          <p>Something went wrong.</p>
-          <button type="button" onClick={() => this.setState({ hasError: false })}>
+        <div className="error-boundary" role="alert">
+          <p className="panel-heading__kicker">Calculator unavailable</p>
+          <h1>Something went wrong.</h1>
+          <p>Your calculation has not been submitted. Reset the interface and try again.</p>
+          <button
+            type="button"
+            className="error-boundary__action"
+            onClick={() => this.setState({ hasError: false })}
+          >
             Try again
           </button>
         </div>

@@ -4,12 +4,16 @@ import './styles.css'
 import App from './App.tsx'
 import { ErrorBoundary } from './components/ErrorBoundary.tsx'
 import { HttpCalculatorApi } from './api/client.ts'
+import { BrowserThemePreferenceStore } from './theme/theme.ts'
 
-// Composition root: the one place a concrete CalculatorApi is constructed.
+// Composition root: concrete API and persistence adapters are constructed here.
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ErrorBoundary>
-      <App api={new HttpCalculatorApi()} />
+      <App
+        api={new HttpCalculatorApi()}
+        themeStore={new BrowserThemePreferenceStore()}
+      />
     </ErrorBoundary>
   </StrictMode>,
 )

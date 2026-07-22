@@ -1,6 +1,6 @@
 # Local development targets. CI runs the same commands so behavior never diverges.
 
-.PHONY: run-backend run-frontend test cover lint
+.PHONY: run-backend run-frontend test cover lint e2e
 
 run-backend:
 	cd backend && go run ./cmd/server
@@ -20,3 +20,6 @@ cover:
 lint:
 	cd backend && go vet ./...
 	cd frontend && npm run lint
+
+e2e:
+	cd frontend && npm run test:e2e

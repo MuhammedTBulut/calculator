@@ -1,47 +1,72 @@
 /*
- * Calculator — "precision instrument" design pass.
+ * Sezzle Calculator
  *
- * Two-tone bench-instrument look: a light anodized chassis with a dark
- * VFD-style display window. Key groups read through tone and weight only
- * (digits: graphite blocks; operators: pale keys; actions: recessed pale;
- * equals: deepest block) — no rainbow coding.
- *
- * The single accent is NEEDLE RED (#A31126 on light, #F0475A on the dark
- * window). Chosen because the accent's job is the fault-and-recovery
- * treatment — the red needle of a meter pegged on the exact character, the
- * error strip, and the Retry affordance — plus the one key heritage
- * calculators printed in red: C. Deliberately not orange/terracotta.
- * Verified contrast (checkpoint-4 review): deep accent 6.61:1 on body,
- * 5.48:1 on pale keys; needle 4.27:1 on its lamp and 4.85:1 on the window
- * (non-text marks, ≥3:1 per WCAG 1.4.11); window glyphs 13.5:1; digit
- * glyphs 11.97:1.
+ * The interface borrows the calm hierarchy and direct manipulation of a
+ * native calculator while keeping Sezzle's warm operator tone and four-color
+ * display signature as its own identity.
  */
 
 :root {
-  --chassis: #e4e2dc;
-  --body: #edebe6;
-  --edge: #c8c5bd;
-  --ink: #212322;
-  --ink-dim: #67645c;
+  color-scheme: light;
 
-  --window: #131a16;
-  --glyph: #e8f1ea;
+  --page: #f3f3f5;
+  --surface: #ffffff;
+  --surface-muted: #e8e8ec;
+  --surface-hover: #ddddE2;
+  --line: rgba(0, 0, 0, 0.08);
+  --line-strong: rgba(0, 0, 0, 0.16);
+  --ink: #1d1d1f;
+  --ink-muted: #646469;
+  --ink-soft: #96969b;
 
-  /* Self-critique cut: a fourth "recessed" tone for the action keys was
-   * removed — it read as noise next to the operator tone, and the red C
-   * glyph already marks that group. Three tones carry the whole keypad. */
-  --key-digit: #2e302f;
-  --key-digit-glyph: #f4f3ef;
-  --key-pale: #dad7cf;
-  --key-equals: #1b1d1c;
+  --display: #050505;
+  --display-line: rgba(255, 255, 255, 0.1);
+  --display-ink: #ffffff;
+  --display-muted: #949498;
 
-  --accent-deep: #a31126;
-  --accent-bright: #f0475a;
-  --accent-lamp: #3a1a1f;
+  /* Kept only for the approved brand signature above the readout. */
+  --sezzle-violet: #8333d4;
+  --sezzle-green: #00b874;
+  --sezzle-orange: #fea500;
+  --sezzle-salmon: #ff5667;
+  --sezzle-mint-soft: #e7f8f2;
+  --sezzle-salmon-soft: #fff0f2;
 
-  --mono: ui-monospace, 'SF Mono', 'Cascadia Mono', Menlo, Consolas,
-    'Liberation Mono', monospace;
-  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
+  --danger: #b3263d;
+  --focus: #007a4d;
+  --operator: var(--sezzle-orange);
+  --operator-hover: #ffb733;
+  --operator-ink: #241600;
+  --key-digit: #e8e8eb;
+  --key-digit-hover: #dadaDe;
+  --key-function: #c8c8cd;
+  --key-function-hover: #bcbcc2;
+  --key-function-ink: #171719;
+  --panel-shadow: 0 26px 70px rgba(0, 0, 0, 0.1);
+  --sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display',
+    'Helvetica Neue', Arial, sans-serif;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --page: #000000;
+  --surface: #111113;
+  --surface-muted: #2c2c2f;
+  --surface-hover: #3b3b3f;
+  --line: rgba(255, 255, 255, 0.09);
+  --line-strong: rgba(255, 255, 255, 0.18);
+  --ink: #f5f5f7;
+  --ink-muted: #a1a1a6;
+  --ink-soft: #747479;
+  --key-digit: #303033;
+  --key-digit-hover: #414145;
+  --key-function: #a6a6aa;
+  --key-function-hover: #b7b7bc;
+  --key-function-ink: #111113;
+  --operator: var(--sezzle-orange);
+  --operator-hover: #ffb733;
+  --operator-ink: #241600;
+  --panel-shadow: 0 28px 78px rgba(0, 0, 0, 0.44);
 }
 
 *,
@@ -50,259 +75,1019 @@
   box-sizing: border-box;
 }
 
+html {
+  min-width: 320px;
+  background: var(--page);
+}
+
 body {
   margin: 0;
+  min-width: 320px;
   min-height: 100dvh;
-  background: var(--chassis);
+  background: var(--page);
   color: var(--ink);
   font-family: var(--sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+button {
+  font: inherit;
 }
 
 #root {
   min-height: 100dvh;
-  display: grid;
-  place-items: center;
-  padding: 24px 16px;
 }
 
-.bench {
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  border: 0;
+  margin: -1px;
+  white-space: nowrap;
+}
+
+.app-shell {
+  width: min(100%, 980px);
+  margin: 0 auto;
+  padding:
+    calc(clamp(24px, 4vw, 48px) + env(safe-area-inset-top, 0px))
+    max(24px, env(safe-area-inset-right, 0px))
+    calc(32px + env(safe-area-inset-bottom, 0px))
+    max(24px, env(safe-area-inset-left, 0px));
+}
+
+/* ---------- Minimal product bar ---------- */
+
+.app-header {
+  --header-control-width: 181px;
+  --theme-switch-width: 116px;
+
   display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  align-items: flex-start;
-  gap: 20px;
+  min-height: 48px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 18px;
 }
 
-/* ---------- Calculator body ---------- */
+.brand-lockup {
+  display: flex;
+  width: min(var(--header-control-width), calc((100% - 12px) / 2));
+  min-width: 0;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.brand-lockup__logo {
+  display: block;
+  width: 91px;
+  height: auto;
+}
+
+.brand-lockup__logo--dark {
+  display: none;
+}
+
+:root[data-theme='dark'] .brand-lockup__logo--light {
+  display: none;
+}
+
+:root[data-theme='dark'] .brand-lockup__logo--dark {
+  display: block;
+}
+
+.brand-lockup__divider {
+  width: 1px;
+  height: 20px;
+  background: var(--line-strong);
+}
+
+.brand-lockup__product {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink-muted);
+  font-size: 0.8125rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.theme-toggle {
+  position: relative;
+  display: grid;
+  width: min(var(--theme-switch-width), calc((100% - 12px) / 2));
+  height: 44px;
+  flex: 0 0 auto;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: center;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-muted);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.07);
+  color: var(--ink);
+  cursor: pointer;
+  isolation: isolate;
+  transition: background-color 120ms ease, transform 120ms cubic-bezier(.2,.8,.2,1);
+}
+
+.theme-toggle:hover {
+  background: var(--surface-hover);
+}
+
+.theme-toggle:active {
+  transform: scale(0.985);
+}
+
+.theme-toggle__thumb {
+  position: absolute;
+  z-index: 0;
+  top: 4px;
+  bottom: 4px;
+  left: 4px;
+  width: calc((100% - 8px) / 2);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.12);
+  transition: transform 180ms cubic-bezier(.2,.8,.2,1);
+}
+
+.theme-toggle[aria-checked='true'] .theme-toggle__thumb {
+  transform: translateX(100%);
+}
+
+.theme-toggle__option {
+  z-index: 1;
+  display: grid;
+  min-width: 0;
+  place-items: center;
+  color: var(--ink-muted);
+  transition: color 120ms ease;
+}
+
+.theme-toggle[aria-checked='false'] .theme-toggle__option--light,
+.theme-toggle[aria-checked='true'] .theme-toggle__option--dark {
+  color: var(--ink);
+}
+
+.theme-toggle__option svg {
+  display: block;
+}
+
+/* ---------- Calculator workspace ---------- */
+
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 434px) minmax(260px, 300px);
+  align-items: start;
+  justify-content: center;
+  gap: 18px;
+}
+
+.calc,
+.history {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 34px;
+  background: var(--surface);
+  box-shadow: var(--panel-shadow);
+}
 
 .calc {
-  /* Viewport-relative, not percentage: the bench is shrink-to-fit, so a
-   * percentage here would resolve circularly and collapse to min-content. */
-  width: min(calc(100vw - 32px), 372px);
-  background: var(--body);
-  border: 1px solid var(--edge);
-  border-radius: 18px;
-  padding: 18px 16px 16px;
+  width: 100%;
+  max-width: 434px;
+  justify-self: center;
+  padding: clamp(16px, 2.8vw, 26px);
 }
 
-.calc__nameplate {
+/* ---------- Result surface ---------- */
+
+.display {
+  min-width: 0;
+}
+
+.display__screen {
+  position: relative;
+  display: flex;
+  width: 100%;
+  min-height: 220px;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 34px 24px 24px;
+  overflow: hidden;
+  border: 1px solid var(--display-line);
+  border-radius: 24px;
+  background: var(--display);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.16);
+  container-name: result-surface;
+  container-type: inline-size;
+}
+
+/* The four-color signature is intentionally small: brand recognition, not decoration. */
+.display__screen::before {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 4px;
+  background: linear-gradient(
+    90deg,
+    var(--sezzle-green) 0 25%,
+    var(--sezzle-orange) 25% 50%,
+    var(--sezzle-salmon) 50% 75%,
+    var(--sezzle-violet) 75% 100%
+  );
+  content: '';
+}
+
+.display__previous {
   margin: 0 0 12px;
-  font: 600 0.6875rem var(--sans);
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
-  color: var(--ink-dim);
+  overflow: hidden;
+  color: var(--display-muted);
+  font-size: clamp(1rem, 3vw, 1.35rem);
+  font-variant-numeric: tabular-nums;
+  font-weight: 430;
+  letter-spacing: -0.025em;
+  line-height: 1.25;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-
-/* ---------- Display window ---------- */
 
 .display__readout {
-  display: block;
-  background: var(--window);
-  color: var(--glyph);
-  border-radius: 10px;
-  padding: 22px 16px;
-  font-family: var(--mono);
+  --readout-fluid-size: 16cqi;
+  --readout-height-limit: 15dvh;
+  --readout-min-size: 2.75rem;
+  --readout-max-size: 4.5rem;
+
+  display: flex;
+  width: 100%;
+  min-height: 96px;
+  align-items: flex-end;
+  justify-content: flex-end;
+  padding: 0.08em clamp(14px, 0.25em, 24px) 0.12em 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  border: 0;
+  background: transparent;
+  color: var(--display-ink);
+  font-family: var(--sans);
+  font-size: clamp(
+    var(--readout-min-size),
+    min(var(--readout-fluid-size), var(--readout-height-limit)),
+    var(--readout-max-size)
+  );
   font-variant-numeric: tabular-nums;
-  font-size: 1.75rem;
-  line-height: 1.3;
+  font-weight: 300;
+  letter-spacing: -0.025em;
+  line-height: 1.04;
   text-align: right;
   white-space: nowrap;
-  overflow-x: auto;
-  min-height: 4.6rem;
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+  scrollbar-width: thin;
+  scroll-padding-inline-end: 24px;
 }
 
-.display__status,
-.display__error {
-  margin: 8px 2px 0;
-  font-family: var(--mono);
-  font-size: 0.8125rem;
+.display__screen--result .display__readout {
+  --readout-fluid-size: 18cqi;
+  --readout-height-limit: 17dvh;
+  --readout-min-size: 3.1rem;
+  --readout-max-size: 5rem;
+
+  letter-spacing: 0;
 }
 
-.display__status {
-  color: var(--ink-dim);
+/* Content density scales in measured steps so long input stays readable. */
+.display__readout.display__readout--compact {
+  --readout-fluid-size: 13.5cqi;
+  --readout-min-size: 2.4rem;
+  --readout-max-size: 3.8rem;
 }
 
-.display__error {
-  color: var(--accent-deep);
+.display__readout.display__readout--dense {
+  --readout-fluid-size: 11.5cqi;
+  --readout-min-size: 1.7rem;
+  --readout-max-size: 3.3rem;
 }
 
-/* The fault needle: the offending character sits on a dim red lamp with a
- * hard needle mark beneath it — the one place the accent is allowed to
- * interrupt the window. */
+.display__readout.display__readout--ultra {
+  --readout-fluid-size: 7.75cqi;
+  --readout-min-size: 1.05rem;
+  --readout-max-size: 2.5rem;
+}
+
+.display__screen--result .display__readout--compact {
+  --readout-fluid-size: 15cqi;
+  --readout-min-size: 2.7rem;
+  --readout-max-size: 4.25rem;
+}
+
+.display__screen--result .display__readout--dense {
+  --readout-fluid-size: 12.5cqi;
+  --readout-min-size: 2.3rem;
+  --readout-max-size: 3.6rem;
+}
+
+.display__screen--result .display__readout--ultra {
+  --readout-fluid-size: 10.5cqi;
+  --readout-min-size: 2rem;
+  --readout-max-size: 3.1rem;
+}
+
+.display__value {
+  display: inline-block;
+  max-width: 100%;
+}
+
+.display__ghost-parenthesis {
+  color: var(--display-muted);
+}
+
+.display__measure {
+  position: absolute;
+  width: max-content;
+  visibility: hidden;
+  font-family: var(--sans);
+  font-size: clamp(3.1rem, min(18cqi, 17dvh), 5rem);
+  font-variant-numeric: tabular-nums;
+  font-weight: 300;
+  letter-spacing: 0;
+  line-height: 1.04;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.display__message {
+  position: absolute;
+  z-index: 1;
+  top: 18px;
+  right: 18px;
+  left: 18px;
+  padding: 9px 12px;
+  border: 1px solid transparent;
+  border-radius: 11px;
+  font-size: 0.74rem;
+}
+
+.display__message p {
+  margin: 0;
+  line-height: 1.45;
+}
+
+.display__message--status {
+  border-color: rgba(0, 184, 116, 0.24);
+  background: rgba(0, 184, 116, 0.14);
+  color: #a8ebd3;
+}
+
+.display__message--warning {
+  border-color: rgba(254, 165, 0, 0.26);
+  background: rgba(254, 165, 0, 0.14);
+  color: #ffd994;
+}
+
+.display__message--error {
+  border-color: rgba(255, 86, 103, 0.3);
+  background: rgba(255, 86, 103, 0.14);
+  color: #ffc1c8;
+}
+
 .fault {
-  background: var(--accent-lamp);
-  border-bottom: 3px solid var(--accent-bright);
-  border-radius: 2px 2px 0 0;
+  border-bottom: 4px solid #ff7886;
+  border-radius: 2px;
+  background: rgba(255, 86, 103, 0.18);
 }
 
 .fault--caret {
   display: inline-block;
-  width: 2px;
-  height: 1.1em;
-  vertical-align: text-bottom;
-  border-bottom: none;
-  border-left: 3px solid var(--accent-bright);
+  width: 3px;
+  height: 0.95em;
+  border: 0;
+  border-left: 3px solid #ff7886;
   background: none;
+  vertical-align: -0.02em;
 }
-
-/* ---------- Retry ---------- */
 
 .retry {
-  margin: 10px 0 0;
-  padding: 6px 14px;
-  font: 500 0.8125rem var(--sans);
-  color: var(--accent-deep);
-  background: none;
-  border: 1px solid var(--accent-deep);
-  border-radius: 8px;
+  min-height: 44px;
+  margin-top: 10px;
+  padding: 9px 15px;
+  border: 1px solid rgba(0, 122, 77, 0.2);
+  border-radius: 999px;
+  background: var(--sezzle-mint-soft);
+  color: #006540;
   cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 700;
 }
 
-/* ---------- Keypad ---------- */
+.retry:disabled {
+  cursor: wait;
+  opacity: 0.62;
+}
+
+/* ---------- Large tactile keypad ---------- */
 
 .keypad {
-  margin-top: 14px;
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 9px;
+  width: 100%;
+  max-width: 382px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin: 22px auto 0;
 }
 
 .key {
-  min-height: 56px;
-  border: none;
-  border-radius: 10px;
-  font-family: var(--mono);
-  font-size: 1.125rem;
+  display: grid;
+  width: min(100%, 88px);
+  min-width: 0;
+  aspect-ratio: 1;
+  justify-self: center;
+  place-items: center;
+  padding: 8px;
+  border: 1px solid transparent;
+  border-radius: 50%;
   cursor: pointer;
-  /* The hard 2px lower edge is the key's "sculpted" side — one shadow,
-   * no gradients. Pressing sinks the key onto it. */
-  box-shadow: 0 2px 0 var(--edge);
-  transition: transform 80ms ease, box-shadow 80ms ease;
+  font-family: var(--sans);
+  font-size: clamp(1.55rem, 4vw, 2.15rem);
+  font-variant-numeric: tabular-nums;
+  font-weight: 430;
+  line-height: 1;
+  text-align: center;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  transition: background-color 90ms linear, border-color 90ms linear;
+}
+
+.key:hover {
+  border-color: var(--line-strong);
 }
 
 .key:active {
-  transform: translateY(2px);
-  box-shadow: 0 0 0 var(--edge);
+  filter: brightness(1.13);
+  transform: scale(0.95);
+}
+
+.key svg {
+  display: block;
+  transform: translateY(-1px);
+  transform-origin: center;
 }
 
 .key--digit {
   background: var(--key-digit);
-  color: var(--key-digit-glyph);
-  font-weight: 500;
-  box-shadow: 0 2px 0 #191b1a;
-}
-
-.key--digit:active {
-  box-shadow: 0 0 0 #191b1a;
-}
-
-.key--operator {
-  background: var(--key-pale);
   color: var(--ink);
 }
 
+.key--digit:hover {
+  background: var(--key-digit-hover);
+}
+
+.key--function,
 .key--action {
-  background: var(--key-pale);
-  color: var(--ink);
-  font-weight: 600;
+  background: var(--key-function);
+  color: var(--key-function-ink);
+  font-size: clamp(1.35rem, 3.5vw, 1.8rem);
+  font-weight: 560;
 }
 
-/* Heritage: the one red-printed key on a physical calculator is C. */
-.key--action[aria-label='clear'] {
-  color: var(--accent-deep);
+.key--function:hover,
+.key--action:hover {
+  background: var(--key-function-hover);
 }
 
+.key--operator,
 .key--equals {
-  grid-column: span 2;
-  background: var(--key-equals);
-  color: var(--key-digit-glyph);
-  font-weight: 600;
-  box-shadow: 0 2px 0 #000000;
+  background: var(--operator);
+  color: var(--operator-ink);
+  font-size: clamp(1.9rem, 5vw, 2.65rem);
+  font-weight: 400;
 }
 
-.key--equals:active {
-  box-shadow: 0 0 0 #000000;
+.key--operator:hover,
+.key--equals:hover {
+  border-color: transparent;
+  background: var(--operator-hover);
 }
 
-/* ---------- History ---------- */
+/* ---------- Session history ---------- */
 
 .history {
-  width: min(calc(100vw - 32px), 372px);
-  background: var(--body);
-  border: 1px solid var(--edge);
-  border-radius: 18px;
-  padding: 14px 16px;
+  min-height: 390px;
+  padding: 22px;
 }
 
-.history__title {
-  margin: 0 0 8px;
-  font: 600 0.6875rem var(--sans);
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
-  color: var(--ink-dim);
+.history__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.history__header h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 1rem;
+  font-weight: 650;
+  letter-spacing: -0.025em;
+}
+
+.history__count {
+  min-width: 30px;
+  padding: 6px 9px;
+  border-radius: 999px;
+  background: var(--surface-muted);
+  color: var(--ink-muted);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.history__empty {
+  display: grid;
+  min-height: 296px;
+  place-items: center;
+  color: var(--ink-muted);
+  text-align: center;
+}
+
+.history__empty p {
+  margin: 0;
+  font-size: 0.8125rem;
 }
 
 .history__list {
   margin: 0;
-  padding: 0;
+  padding: 8px 0 0;
   list-style: none;
 }
 
+.history__list li + li {
+  border-top: 1px solid var(--line);
+}
+
 .history__entry {
+  display: grid;
   width: 100%;
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 8px 6px;
-  background: none;
-  border: none;
-  border-radius: 6px;
-  font-family: var(--mono);
-  font-variant-numeric: tabular-nums;
-  font-size: 0.875rem;
+  min-height: 54px;
+  grid-template-columns: 26px minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  padding: 10px 7px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
   color: var(--ink);
   cursor: pointer;
   text-align: left;
 }
 
 .history__entry:hover {
-  background: var(--key-pale);
+  background: var(--surface-muted);
+}
+
+.history__index {
+  color: var(--ink-soft);
+  font-size: 0.625rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+}
+
+.history__equation {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  font-variant-numeric: tabular-nums;
 }
 
 .history__expression {
-  color: var(--ink-dim);
+  min-width: 0;
   overflow: hidden;
+  color: var(--ink-muted);
+  font-size: 0.75rem;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .history__result {
-  font-weight: 600;
+  min-width: 0;
+  max-width: 55%;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 0.9375rem;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-/* ---------- Focus & motion ---------- */
+/* ---------- Recovery, accessibility and responsive behavior ---------- */
 
-/* One focus treatment everywhere: an ink ring lifted off the element so it
- * stays visible on light keys, dark keys, and the red retry button alike. */
+.error-boundary {
+  width: min(calc(100% - 32px), 520px);
+  margin: 12vh auto 0;
+  padding: 30px;
+  border: 1px solid var(--line);
+  border-radius: 26px;
+  background: var(--surface);
+  box-shadow: var(--panel-shadow);
+}
+
+.error-boundary h1 {
+  margin: 0 0 8px;
+  font-size: 1.75rem;
+  letter-spacing: -0.04em;
+}
+
+.error-boundary p {
+  margin: 0;
+  color: var(--ink-muted);
+  line-height: 1.55;
+}
+
+.error-boundary__action {
+  min-height: 44px;
+  margin-top: 20px;
+  padding: 9px 15px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--operator);
+  color: var(--operator-ink);
+  cursor: pointer;
+  font-weight: 700;
+}
+
 :focus-visible {
-  outline: 2px solid var(--ink);
-  outline-offset: 2px;
+  outline: 3px solid var(--focus);
+  outline-offset: 3px;
+}
+
+.display__readout:focus-visible,
+.key--operator:focus-visible,
+.key--equals:focus-visible {
+  outline-color: #66e0b5;
+}
+
+:root[data-theme='dark'] .retry {
+  border-color: rgba(0, 184, 116, 0.27);
+  background: rgba(0, 184, 116, 0.15);
+  color: #a5e5ce;
+}
+
+@media (max-width: 820px) {
+  .app-shell {
+    width: min(100%, 560px);
+  }
+
+  .workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .history {
+    min-height: auto;
+  }
+
+  .history__empty {
+    min-height: 130px;
+  }
+}
+
+/*
+ * Keep the complete instrument above the fold on common laptop and tablet
+ * viewports. Width-only breakpoints are not enough here: a 768 px-wide tablet
+ * and a 1024 px-wide laptop can both have a short browser canvas. Controls
+ * stay comfortably above the 44 px minimum touch target while the display,
+ * gaps and outer padding compress as one coherent layout.
+ */
+@media (min-width: 481px) and (max-height: 950px) {
+  .app-shell {
+    padding-top: calc(10px + env(safe-area-inset-top, 0px));
+    padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .app-header {
+    min-height: 44px;
+    margin-bottom: 8px;
+  }
+
+  .theme-toggle {
+    height: 44px;
+  }
+
+  .calc {
+    max-width: 360px;
+    padding: 16px;
+  }
+
+  .display__screen {
+    min-height: 160px;
+    padding: 26px 20px 18px;
+  }
+
+  .display__previous {
+    margin-bottom: 8px;
+  }
+
+  .display__readout {
+    min-height: 76px;
+  }
+
+  .keypad {
+    max-width: 328px;
+    gap: 8px;
+    margin-top: 14px;
+  }
+
+  .key {
+    width: min(100%, 76px);
+  }
+
+}
+
+@media (min-width: 821px) and (max-height: 950px) {
+  .workspace {
+    grid-template-columns: minmax(0, 360px) minmax(260px, 300px);
+  }
+}
+
+@media (max-width: 480px) {
+  .app-shell {
+    padding:
+      calc(18px + env(safe-area-inset-top, 0px))
+      max(9px, env(safe-area-inset-right, 0px))
+      calc(16px + env(safe-area-inset-bottom, 0px))
+      max(9px, env(safe-area-inset-left, 0px));
+  }
+
+  .app-header {
+    margin: 0 5px 14px;
+  }
+
+  .brand-lockup {
+    width: auto;
+    max-width: var(--header-control-width);
+    gap: 10px;
+  }
+
+  .brand-lockup__logo {
+    width: 82px;
+  }
+
+  .theme-toggle {
+    width: clamp(88px, 22vw, 100px);
+    height: 44px;
+  }
+
+  .calc,
+  .history {
+    border-radius: 25px;
+  }
+
+  .calc {
+    padding: 12px;
+  }
+
+  .display__screen {
+    min-height: 190px;
+    padding: 30px 17px 19px;
+    border-radius: 19px;
+  }
+
+  .display__previous {
+    font-size: 1rem;
+  }
+
+  .display__readout {
+    min-height: 82px;
+  }
+
+  .keypad {
+    gap: 8px;
+    margin-top: 14px;
+  }
+
+  .key {
+    font-size: clamp(1.4rem, 7vw, 1.9rem);
+  }
+
+  .key--operator,
+  .key--equals {
+    font-size: clamp(1.8rem, 9vw, 2.3rem);
+  }
+
+  .key--function,
+  .key--action,
+  .key--action[aria-label='clear'] {
+    font-size: clamp(1.2rem, 6vw, 1.55rem);
+  }
+
+  .history {
+    padding: 18px;
+  }
+}
+
+/*
+ * Short portrait canvases use one shared, height-led geometry contract. The
+ * available height determines the four-column keypad width, and the keypad
+ * width determines the calculator shell. This prevents a wide display from
+ * separating visually from a tiny keypad on split-screen and zoomed views.
+ */
+@media (max-width: 480px) and (min-height: 561px) and (max-height: 900px) {
+  .app-shell {
+    padding-top: calc(10px + env(safe-area-inset-top, 0px));
+  }
+
+  .app-header {
+    min-height: 44px;
+    margin-bottom: 8px;
+  }
+
+  .theme-toggle {
+    width: 88px;
+    height: 40px;
+  }
+
+  .calc {
+    /* 4 keys + 3 gaps, derived from the height left below the product bar. */
+    --compact-keypad-width: clamp(226px, calc(66.667dvh - 163px), 330px);
+
+    width: min(100%, calc(var(--compact-keypad-width) + 20px));
+    max-width: none;
+    padding: 10px;
+  }
+
+  .display__screen {
+    min-height: 130px;
+    padding: 22px 15px 14px;
+  }
+
+  .display__previous {
+    margin-bottom: 6px;
+  }
+
+  .display__readout {
+    min-height: 64px;
+  }
+
+  .keypad {
+    width: var(--compact-keypad-width);
+    max-width: 100%;
+    gap: 6px;
+    margin-top: 10px;
+  }
+
+  .key {
+    width: 100%;
+  }
+
+}
+
+/*
+ * Height- or aspect-ratio-constrained canvases use a purpose-built 6 × 4
+ * instrument. This includes landscape windows and squarer split-screen/zoom
+ * layouts where a six-row portrait keypad would waste horizontal space.
+ * Every capability stays available and the screen/keypad stay full-width.
+ */
+@media (max-height: 560px),
+  (max-width: 820px) and (max-height: 780px) and (min-aspect-ratio: 3 / 4) {
+  .app-shell {
+    width: min(100%, 980px);
+    padding:
+      calc(4px + env(safe-area-inset-top, 0px))
+      max(8px, env(safe-area-inset-right, 0px))
+      calc(8px + env(safe-area-inset-bottom, 0px))
+      max(8px, env(safe-area-inset-left, 0px));
+  }
+
+  .app-header {
+    min-height: 44px;
+    margin: 0 4px 4px;
+  }
+
+  .workspace {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  .calc {
+    width: 100%;
+    max-width: none;
+    padding: 6px;
+    border-radius: 22px;
+  }
+
+  .display__screen {
+    min-height: clamp(70px, 26dvh, 100px);
+    padding: 12px 12px 6px;
+    border-radius: 16px;
+  }
+
+  .display__previous {
+    position: absolute;
+    top: 10px;
+    right: 12px;
+    left: 12px;
+    margin-bottom: 2px;
+    font-size: 0.8rem;
+  }
+
+  .display__readout {
+    min-height: 44px;
+    padding: 0 10px 0 0;
+  }
+
+  .display__message {
+    top: 9px;
+    right: 10px;
+    left: 10px;
+    padding: 6px 9px;
+    font-size: 0.68rem;
+  }
+
+  .keypad {
+    width: 100%;
+    max-width: none;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: clamp(3px, 1dvh, 6px);
+    margin-top: 5px;
+  }
+
+  .key {
+    order: var(--landscape-order);
+    width: 100%;
+    height: clamp(38px, min(12dvh, 10dvw), 52px);
+    aspect-ratio: auto;
+    padding: 5px;
+    border-radius: 999px;
+    font-size: clamp(1.25rem, 7dvh, 1.85rem);
+  }
+
+  .key--function,
+  .key--action,
+  .key--action[aria-label='clear'] {
+    font-size: clamp(1.1rem, 6dvh, 1.55rem);
+  }
+
+  .key--operator,
+  .key--equals {
+    font-size: clamp(1.5rem, 8dvh, 2.15rem);
+  }
+
+  .history {
+    display: flex;
+    height: min(390px, calc(100dvh - 60px));
+    min-height: 0;
+    flex-direction: column;
+    overflow: auto;
+    padding: 16px;
+    border-radius: 22px;
+  }
+
+  .history__empty {
+    min-height: 0;
+    flex: 1;
+  }
+
+  .history__list {
+    overflow-y: auto;
+  }
+}
+
+@media (prefers-contrast: more) {
+  :root {
+    --line: rgba(0, 0, 0, 0.3);
+    --line-strong: rgba(0, 0, 0, 0.48);
+  }
+
+  :root[data-theme='dark'] {
+    --line: rgba(255, 255, 255, 0.3);
+    --line-strong: rgba(255, 255, 255, 0.48);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .key {
+  .theme-toggle {
+    transition: background-color 80ms linear;
+  }
+
+  .theme-toggle__thumb,
+  .theme-toggle__option {
     transition: none;
   }
+
+  .theme-toggle:active,
   .key:active {
     transform: none;
-  }
-}
-
-/* At 360px four 1fr columns with 9px gaps still yield ≥56px-wide keys, so
- * no layout change is needed — only the bench stacking. */
-@media (max-width: 767px) {
-  .bench {
-    flex-direction: column;
-    align-items: center;
   }
 }
