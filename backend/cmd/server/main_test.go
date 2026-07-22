@@ -1,13 +1,17 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 func discardLogger() *slog.Logger {
@@ -193,6 +197,144 @@ func TestHealthcheckProbe(t *testing.T) {
 	if code := healthcheck(config{port: port}); code == 0 {
 		t.Fatal("healthcheck against a stopped server = 0, want non-zero")
 	}
+}
+
+// The rate limiter's own validation is reachable through buildHandler even
+// though loadConfig itself would never produce an out-of-range config — a
+// test can construct one directly, exercising the wiring error path that a
+// hardcoded, always-valid operations list keeps the other three
+// constructors (NewRegistry/NewEvaluator/NewHandler) from ever reaching.
+func TestBuildHandlerRejectsInvalidRateLimitConfig(t *testing.T) {
+	cfg := testConfig()
+	cfg.rateLimitBurst = 0
+	if _, err := buildHandler(cfg, discardLogger()); err == nil {
+		t.Fatal("buildHandler with a zero rate-limit burst: expected an error, got nil")
+	}
+}
+
+// freeLoopbackAddr reserves an OS-assigned loopback port and immediately
+// releases it, so a test can put a real address into *http.Server.Addr
+// before run() calls ListenAndServe — run() always binds its own listener
+// internally, so a test cannot hand it a pre-made net.Listener directly.
+func freeLoopbackAddr(t *testing.T) string {
+	t.Helper()
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	addr := l.Addr().String()
+	if err := l.Close(); err != nil {
+		t.Fatalf("close probe listener: %v", err)
+	}
+	return addr
+}
+
+// waitForServing blocks until addr accepts a TCP connection, so a test
+// cannot race ahead of run()'s internal ListenAndServe and produce a false
+// pass (e.g. canceling the context before the server ever started).
+func waitForServing(t *testing.T, addr string) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		conn, err := net.DialTimeout("tcp", addr, 100*time.Millisecond)
+		if err == nil {
+			conn.Close()
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("server at %s did not start accepting connections in time", addr)
+}
+
+func TestRunStopsGracefullyWhenContextIsCanceled(t *testing.T) {
+	addr := freeLoopbackAddr(t)
+	srv := &http.Server{Addr: addr, Handler: http.NotFoundHandler()}
+	ctx, cancel := context.WithCancel(context.Background())
+
+	runErr := make(chan error, 1)
+	go func() { runErr <- run(ctx, srv, discardLogger(), 2*time.Second) }()
+	waitForServing(t, addr)
+
+	cancel()
+	select {
+	case err := <-runErr:
+		if err != nil {
+			t.Fatalf("run() after graceful cancellation = %v, want nil", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("run() did not return within the shutdown timeout")
+	}
+}
+
+func TestRunReturnsAListenAndServeError(t *testing.T) {
+	// Occupy a port first (and keep it open) so the second server's
+	// ListenAndServe fails immediately with an ordinary bind error.
+	occupied, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer occupied.Close()
+
+	srv := &http.Server{Addr: occupied.Addr().String(), Handler: http.NotFoundHandler()}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	err = run(ctx, srv, discardLogger(), time.Second)
+	if err == nil {
+		t.Fatal("run() on an already-bound address: expected an error, got nil")
+	}
+	if errors.Is(err, http.ErrServerClosed) {
+		t.Fatalf("run() leaked http.ErrServerClosed instead of the real bind error: %v", err)
+	}
+}
+
+func TestRunWrapsAShutdownTimeoutError(t *testing.T) {
+	addr := freeLoopbackAddr(t)
+	blockUntil := make(chan struct{})
+
+	srv := &http.Server{
+		Addr: addr,
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			<-blockUntil // held open past the shutdown deadline below
+			w.WriteHeader(http.StatusOK)
+		}),
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	runErr := make(chan error, 1)
+	go func() { runErr <- run(ctx, srv, discardLogger(), 10*time.Millisecond) }()
+	waitForServing(t, addr)
+
+	// Start a request that will still be in flight when shutdown begins, so
+	// srv.Shutdown cannot finish within the (deliberately tiny) timeout.
+	client := &http.Client{Timeout: 5 * time.Second}
+	reqDone := make(chan struct{})
+	go func() {
+		defer close(reqDone)
+		resp, reqErr := client.Get("http://" + addr)
+		if reqErr == nil {
+			resp.Body.Close()
+		}
+	}()
+	time.Sleep(50 * time.Millisecond) // let the request actually reach the handler
+	cancel()
+
+	select {
+	case err := <-runErr:
+		if err == nil {
+			t.Fatal("run() with a request stuck past the shutdown deadline: expected an error, got nil")
+		}
+		if !strings.Contains(err.Error(), "graceful shutdown") {
+			t.Fatalf("run() error = %v, want it wrapped as a graceful-shutdown failure", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("run() did not return within the test's own timeout")
+	}
+
+	// run() has already returned its (expected) error; release the stuck
+	// handler now so its goroutine and the pending client request finish
+	// quickly instead of idling until the client's own 5s timeout.
+	close(blockUntil)
+	<-reqDone
 }
 
 func TestHealthEndpointShape(t *testing.T) {

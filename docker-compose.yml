@@ -1,12 +1,17 @@
+# FRONTEND_PORT overrides the host port nginx is published on (default 3000)
+# — set it in the environment or a .env file next to this one, e.g.
+# `FRONTEND_PORT=8080 docker compose up`. CORS_ORIGIN tracks the same
+# variable below so the two never drift out of sync.
 services:
   backend:
     build: ./backend
     environment:
       PORT: "8080"
       # The browser only ever talks to nginx, so cross-origin requests to the
-      # API are never legitimate in this topology; keep the allowlist empty of
-      # real origins rather than echoing one.
-      CORS_ORIGIN: "http://localhost:3000"
+      # API are never legitimate in this topology; keep the allowlist a
+      # single real origin — the frontend's own published port — rather than
+      # echoing an arbitrary one.
+      CORS_ORIGIN: "http://localhost:${FRONTEND_PORT:-3000}"
       RATE_LIMIT_PER_MINUTE: "60"
       RATE_LIMIT_BURST: "20"
       # nginx overwrites X-Real-IP before forwarding to the private backend.
@@ -26,7 +31,7 @@ services:
   frontend:
     build: ./frontend
     ports:
-      - "3000:80"
+      - "${FRONTEND_PORT:-3000}:80"
     depends_on:
       backend:
         condition: service_healthy

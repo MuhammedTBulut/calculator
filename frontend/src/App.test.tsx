@@ -455,6 +455,32 @@ describe('calculator', () => {
     expect(fault).toHaveTextContent(')')
   })
 
+  it('underlines an unknown function the same way it underlines a syntax fault', async () => {
+    // The backend now carries a position for UNKNOWN_FUNCTION too (not just
+    // SYNTAX_ERROR); Display keys off error.position generically, so this
+    // confirms the fault needle picks it up without any frontend-specific
+    // handling for the code. The alert still shows the local dictionary's
+    // generic phrase, never the backend's message text, matching every
+    // other error code.
+    const api = apiReturning({
+      ok: false,
+      code: 'UNKNOWN_FUNCTION',
+      message: 'unknown function "foo"', // raw server message — must not be shown
+      position: 0,
+    })
+    const { container } = renderApp(api)
+
+    await clickKeys(['5', 'equals'])
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('Unknown function — character 1')
+    expect(alert).not.toHaveTextContent('foo')
+
+    const fault = container.querySelector('[data-fault]')
+    expect(fault).not.toBeNull()
+    expect(fault).toHaveTextContent('5')
+  })
+
   it('marks an unexpected end of input with an empty caret after the expression', async () => {
     const api = apiReturning({
       ok: false,

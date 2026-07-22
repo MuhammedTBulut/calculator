@@ -132,6 +132,44 @@ func healthcheck(cfg config) int {
 	return 0
 }
 
+// run starts srv and blocks until it exits: either a fatal ListenAndServe
+// error, or ctx is canceled, in which case it drives graceful shutdown
+// within shutdownTimeout. A nil return means a clean stop; main treats any
+// non-nil return as the process's failure to report and exit on.
+//
+// Extracted out of main so the shutdown state machine — the part with real
+// branching logic — is unit-testable; main itself is not (it parses process
+// flags and calls os.Exit, neither of which a test can safely exercise).
+func run(ctx context.Context, srv *http.Server, logger *slog.Logger, shutdownTimeout time.Duration) error {
+	serveErr := make(chan error, 1)
+	go func() {
+		logger.Info("server starting", "addr", srv.Addr)
+		serveErr <- srv.ListenAndServe()
+	}()
+
+	select {
+	case err := <-serveErr:
+		if errors.Is(err, http.ErrServerClosed) {
+			return nil
+		}
+		return err
+	case <-ctx.Done():
+		logger.Info("shutdown signal received")
+		// Give in-flight requests a bounded window to finish before the
+		// process exits; new connections are refused immediately.
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+		defer cancel()
+		if err := srv.Shutdown(shutdownCtx); err != nil {
+			return fmt.Errorf("graceful shutdown: %w", err)
+		}
+		return nil
+	}
+}
+
+// shutdownTimeout bounds how long graceful shutdown waits for in-flight
+// requests before the process exits regardless.
+const shutdownTimeout = 10 * time.Second
+
 func main() {
 	probe := flag.Bool("healthcheck", false, "probe a running server and exit")
 	flag.Parse()
@@ -169,28 +207,10 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	serveErr := make(chan error, 1)
-	go func() {
-		logger.Info("server starting", "addr", srv.Addr, "cors_origin", cfg.corsOrigin)
-		serveErr <- srv.ListenAndServe()
-	}()
-
-	select {
-	case err := <-serveErr:
-		if !errors.Is(err, http.ErrServerClosed) {
-			logger.Error("server failed", "error", err)
-			os.Exit(1)
-		}
-	case <-ctx.Done():
-		logger.Info("shutdown signal received")
-		// Give in-flight requests a bounded window to finish before the
-		// process exits; new connections are refused immediately.
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		if err := srv.Shutdown(shutdownCtx); err != nil {
-			logger.Error("graceful shutdown failed", "error", err)
-			os.Exit(1)
-		}
+	logger.Info("cors_origin configured", "cors_origin", cfg.corsOrigin)
+	if err := run(ctx, srv, logger, shutdownTimeout); err != nil {
+		logger.Error("server failed", "error", err)
+		os.Exit(1)
 	}
 	logger.Info("server stopped")
 }

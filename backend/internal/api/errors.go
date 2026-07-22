@@ -2,6 +2,7 @@ package api
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 
 	"github.com/MuhammedTBulut/calculator/backend/internal/apperror"
@@ -52,12 +53,33 @@ func mapDomainError(err error) (int, ErrorBody, bool) {
 			ErrorBody{Code: CodeSyntaxError, Message: "syntax error", Position: &pos}, true
 	}
 
+	var unknownFn *apperror.UnknownFunctionError
+	if errors.As(err, &unknownFn) {
+		// Same precision as SYNTAX_ERROR: names the exact identifier and
+		// carries its position, so the UI can underline it the same way it
+		// underlines a syntax fault (Display keys off `position` generically,
+		// not off the SYNTAX_ERROR code specifically).
+		pos := unknownFn.Position
+		return http.StatusUnprocessableEntity,
+			ErrorBody{
+				Code:     CodeUnknownFunction,
+				Message:  fmt.Sprintf("unknown function %q", unknownFn.Name),
+				Position: &pos,
+			}, true
+	}
+	if errors.Is(err, apperror.ErrUnknownFunction) {
+		// Defensive: every producer wraps ErrUnknownFunction in an
+		// UnknownFunctionError, so this bare-sentinel path should be
+		// unreachable; kept only so the sentinel still maps to something.
+		return http.StatusUnprocessableEntity,
+			ErrorBody{Code: CodeUnknownFunction, Message: "unknown function"}, true
+	}
+
 	for _, m := range []struct {
 		sentinel error
 		code     string
 		message  string
 	}{
-		{apperror.ErrUnknownFunction, CodeUnknownFunction, "unknown function"},
 		{apperror.ErrDivisionByZero, CodeDivisionByZero, "division by zero"},
 		{apperror.ErrNegativeSqrt, CodeNegativeSqrt, "square root of a negative number"},
 		{apperror.ErrInvalidOperand, CodeInvalidOperand, "invalid operand"},

@@ -73,7 +73,7 @@ func (e *Evaluator) evalRPN(rpn []token) (float64, error) {
 	for _, t := range rpn {
 		if t.kind == tokIdent {
 			if _, known := functions[t.text]; !known {
-				return 0, fmt.Errorf("%q at position %d: %w", t.text, t.pos, apperror.ErrUnknownFunction)
+				return 0, &apperror.UnknownFunctionError{Name: t.text, Position: t.pos}
 			}
 		}
 	}

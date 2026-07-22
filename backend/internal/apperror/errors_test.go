@@ -62,3 +62,33 @@ func TestSyntaxErrorCarriesPositionAndUnwrapsToErrSyntax(t *testing.T) {
 		t.Fatal("wrapped SyntaxError is not extractable with errors.As")
 	}
 }
+
+func TestUnknownFunctionErrorCarriesNameAndPositionAndUnwraps(t *testing.T) {
+	err := error(&apperror.UnknownFunctionError{Name: "foo", Position: 3})
+
+	if !errors.Is(err, apperror.ErrUnknownFunction) {
+		t.Fatal("UnknownFunctionError does not unwrap to ErrUnknownFunction")
+	}
+	if errors.Is(err, apperror.ErrSyntax) {
+		t.Fatal("UnknownFunctionError incorrectly matches ErrSyntax")
+	}
+
+	var unknownErr *apperror.UnknownFunctionError
+	if !errors.As(err, &unknownErr) {
+		t.Fatal("errors.As could not extract *UnknownFunctionError")
+	}
+	if unknownErr.Name != "foo" || unknownErr.Position != 3 {
+		t.Fatalf("got %+v, want Name=foo Position=3", unknownErr)
+	}
+
+	want := `unknown function "foo" at position 3`
+	if got := err.Error(); got != want {
+		t.Fatalf("Error() = %q, want %q", got, want)
+	}
+
+	// The type must stay extractable through wrapping — the adapter relies on
+	// it to report the identifier and its position.
+	if !errors.As(fmt.Errorf("evaluate: %w", err), &unknownErr) {
+		t.Fatal("wrapped UnknownFunctionError is not extractable with errors.As")
+	}
+}
