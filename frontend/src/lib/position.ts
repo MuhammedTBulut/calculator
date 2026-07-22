@@ -10,6 +10,12 @@ export interface FaultRange {
   start: number
   /** UTF-16 index just past the offending code point. */
   end: number
+  /**
+   * 0-based ordinal of the offending code point — what a person would call
+   * "the Nth character". Differs from `start` when astral characters
+   * precede the fault (each occupies two UTF-16 units but is one character).
+   */
+  charIndex: number
 }
 
 const utf8 = new TextEncoder()
@@ -22,13 +28,15 @@ const utf8 = new TextEncoder()
 export function faultRange(text: string, byteOffset: number): FaultRange {
   let bytes = 0
   let units = 0
+  let chars = 0
   for (const cp of text) {
     const cpBytes = utf8.encode(cp).length
     if (byteOffset < bytes + cpBytes) {
-      return { start: units, end: units + cp.length }
+      return { start: units, end: units + cp.length, charIndex: chars }
     }
     bytes += cpBytes
     units += cp.length
+    chars++
   }
-  return { start: text.length, end: text.length }
+  return { start: text.length, end: text.length, charIndex: chars }
 }

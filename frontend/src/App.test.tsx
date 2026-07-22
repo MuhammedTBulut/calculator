@@ -111,7 +111,7 @@ describe('calculator', () => {
     expect(fault).toHaveTextContent('+')
   })
 
-  it('marks an unexpected end of input with a caret after the expression', async () => {
+  it('marks an unexpected end of input with an empty caret after the expression', async () => {
     const api = apiReturning({
       ok: false,
       code: 'SYNTAX_ERROR',
@@ -122,8 +122,56 @@ describe('calculator', () => {
 
     await clickKeys(['open parenthesis', '2', 'plus', 'equals'])
 
-    await screen.findByRole('alert')
-    expect(container.querySelector('[data-fault]')).not.toBeNull()
+    expect(await screen.findByRole('alert')).toHaveTextContent('character 4')
+    const caret = container.querySelector('[data-fault]')
+    expect(caret).not.toBeNull()
+    expect(caret).toHaveClass('fault--caret')
+    expect(caret).toBeEmptyDOMElement()
+    // The caret trails the full expression: nothing is underlined, the gap is marked.
+    expect(caret!.previousSibling?.textContent).toBe('(2+')
+  })
+
+  it('activates the focused button with Enter instead of submitting', async () => {
+    const api = apiReturning()
+    render(<App api={api} />)
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole('button', { name: '7' }))
+    screen.getByRole('button', { name: 'clear' }).focus()
+    await user.keyboard('{Enter}')
+
+    // Enter performed the focused button's action (clear), not submit.
+    expect(screen.getByLabelText('result')).toHaveTextContent('0')
+    expect(api.evaluate).not.toHaveBeenCalled()
+  })
+
+  it('ignores printable shortcuts while focus is in another component', async () => {
+    const api = apiReturning({ ok: true, value: 14 })
+    render(<App api={api} />)
+    const user = userEvent.setup()
+
+    await clickKeys(['2', 'plus', '3', 'multiply', '4', 'equals'])
+    const entry = await screen.findByRole('button', { name: '2+3*4 = 14' })
+    await clickKeys(['clear'])
+
+    // Focus the history entry (outside the calculator) and type: WCAG 2.1.4
+    // scoping means the keystrokes must not reach the buffer.
+    entry.focus()
+    await user.keyboard('99')
+    expect(screen.getByLabelText('result')).toHaveTextContent('0')
+  })
+
+  it('gives every key an accessible name', () => {
+    render(<App api={apiReturning()} />)
+    const names = [
+      'clear', 'delete', 'open parenthesis', 'close parenthesis',
+      'square root', 'power', 'percent', 'divide',
+      '7', '8', '9', 'multiply', '4', '5', '6', 'minus',
+      '1', '2', '3', 'plus', '0', 'decimal point', 'equals',
+    ]
+    for (const name of names) {
+      expect(screen.getByRole('button', { name })).toBeInTheDocument()
+    }
   })
 
   it('clears a previous error as soon as new input arrives', async () => {

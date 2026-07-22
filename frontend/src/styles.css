@@ -7,11 +7,14 @@
  * equals: deepest block) — no rainbow coding.
  *
  * The single accent is NEEDLE RED (#A31126 on light, #F0475A on the dark
- * window). Chosen because the accent's one job is marking faults with
- * precision — the red needle of a meter pegged on the exact character —
- * and because heritage calculators printed exactly one key in red: C.
- * Deliberately not orange/terracotta, and checked to ≥4.5:1 on its light
- * background (5.8:1) with the bright variant ≥3:1 as a mark on the window.
+ * window). Chosen because the accent's job is the fault-and-recovery
+ * treatment — the red needle of a meter pegged on the exact character, the
+ * error strip, and the Retry affordance — plus the one key heritage
+ * calculators printed in red: C. Deliberately not orange/terracotta.
+ * Verified contrast (checkpoint-4 review): deep accent 6.61:1 on body,
+ * 5.48:1 on pale keys; needle 4.27:1 on its lamp and 4.85:1 on the window
+ * (non-text marks, ≥3:1 per WCAG 1.4.11); window glyphs 13.5:1; digit
+ * glyphs 11.97:1.
  */
 
 :root {

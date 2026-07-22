@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import type { CalcError } from '../hooks/useCalculator'
 import { faultRange } from '../lib/position'
 
@@ -12,14 +13,37 @@ interface DisplayProps {
  * character carries the fault needle — an accent underline marking the exact
  * spot the parser stopped; an end-of-input fault renders as an insertion
  * caret after the expression. The alert text carries the same information
- * ("character N") so the needle is never visual-only.
+ * ("character N", counted in characters, not UTF-16 units) so the needle is
+ * never visual-only.
  */
 export function Display({ expression, error, loading }: DisplayProps) {
   const fault = error?.position != null ? faultRange(expression, error.position) : null
+  const readoutRef = useRef<HTMLOutputElement>(null)
+
+  // The readout is a horizontal scroller; a fault in a long expression may
+  // sit outside the visible window, so bring it into view. (Guarded: jsdom
+  // has no scrollIntoView.)
+  const faultStart = fault?.start
+  useEffect(() => {
+    if (faultStart != null) {
+      readoutRef.current?.querySelector('[data-fault]')?.scrollIntoView?.({
+        inline: 'center',
+        block: 'nearest',
+      })
+    }
+  }, [faultStart, expression])
 
   return (
     <div className="display">
-      <output className="display__readout" aria-live="polite" aria-label="result">
+      {/* tabIndex makes the scrollable readout keyboard-reachable
+          (arrow-key scrolling), per WCAG scrollable-region guidance. */}
+      <output
+        className="display__readout"
+        aria-live="polite"
+        aria-label="result"
+        tabIndex={0}
+        ref={readoutRef}
+      >
         {fault ? (
           <FaultedExpression expression={expression} start={fault.start} end={fault.end} />
         ) : expression === '' ? (
@@ -36,7 +60,7 @@ export function Display({ expression, error, loading }: DisplayProps) {
       {error && (
         <p className="display__error" role="alert">
           {error.message}
-          {fault && ` — character ${fault.start + 1}`}
+          {fault && ` — character ${fault.charIndex + 1}`}
         </p>
       )}
     </div>

@@ -1,10 +1,13 @@
+/** Tone groups a key can belong to; each maps to a `key--<group>` class. */
+export type KeyGroup = 'digit' | 'operator' | 'action' | 'equals'
+
 interface KeyProps {
   /** Visible caption. */
   label: string
   /** Accessible name when the visible caption alone is unclear (e.g. "⌫"). */
   name?: string
   /** Tone group: digits, operators, actions, equals. */
-  group: string
+  group: KeyGroup
   onPress(): void
 }
 

@@ -9,60 +9,46 @@ interface KeypadProps {
 
 /**
  * Physical-calculator row order: actions and functions above, the digit
- * block below, equals anchoring the corner. `group` maps to tone classes —
- * key groups are distinguished by weight and tone, not color.
+ * block below, equals anchoring the corner. The discriminated union keeps
+ * behavior explicit: an input key carries the token it appends; an action
+ * key names which handler it fires — no field does double duty.
  */
-type KeyGroup = 'digit' | 'operator' | 'action' | 'equals'
-
-interface KeySpec {
-  label: string
-  name?: string
-  group: KeyGroup
-  /** Token appended to the buffer; null marks an action key. */
-  token: string | null
-}
+type KeySpec =
+  | { kind: 'input'; label: string; token: string; group: 'digit' | 'operator'; name?: string }
+  | { kind: 'action'; label: string; action: 'clear' | 'delete' | 'submit'; group: 'action' | 'equals'; name: string }
 
 const layout: KeySpec[] = [
-  { label: 'C', name: 'clear', group: 'action', token: null },
-  { label: '⌫', name: 'delete', group: 'action', token: null },
-  { label: '(', name: 'open parenthesis', group: 'operator', token: '(' },
-  { label: ')', name: 'close parenthesis', group: 'operator', token: ')' },
-  { label: '√', name: 'square root', group: 'operator', token: 'sqrt(' },
-  { label: '^', name: 'power', group: 'operator', token: '^' },
-  { label: '%', name: 'percent', group: 'operator', token: '%' },
-  { label: '÷', name: 'divide', group: 'operator', token: '/' },
-  { label: '7', group: 'digit', token: '7' },
-  { label: '8', group: 'digit', token: '8' },
-  { label: '9', group: 'digit', token: '9' },
-  { label: '×', name: 'multiply', group: 'operator', token: '*' },
-  { label: '4', group: 'digit', token: '4' },
-  { label: '5', group: 'digit', token: '5' },
-  { label: '6', group: 'digit', token: '6' },
-  { label: '−', name: 'minus', group: 'operator', token: '-' },
-  { label: '1', group: 'digit', token: '1' },
-  { label: '2', group: 'digit', token: '2' },
-  { label: '3', group: 'digit', token: '3' },
-  { label: '+', name: 'plus', group: 'operator', token: '+' },
-  { label: '0', group: 'digit', token: '0' },
-  { label: '.', name: 'decimal point', group: 'digit', token: '.' },
-  { label: '=', name: 'equals', group: 'equals', token: null },
+  { kind: 'action', label: 'C', action: 'clear', group: 'action', name: 'clear' },
+  { kind: 'action', label: '⌫', action: 'delete', group: 'action', name: 'delete' },
+  { kind: 'input', label: '(', token: '(', group: 'operator', name: 'open parenthesis' },
+  { kind: 'input', label: ')', token: ')', group: 'operator', name: 'close parenthesis' },
+  { kind: 'input', label: '√', token: 'sqrt(', group: 'operator', name: 'square root' },
+  { kind: 'input', label: '^', token: '^', group: 'operator', name: 'power' },
+  { kind: 'input', label: '%', token: '%', group: 'operator', name: 'percent' },
+  { kind: 'input', label: '÷', token: '/', group: 'operator', name: 'divide' },
+  { kind: 'input', label: '7', token: '7', group: 'digit' },
+  { kind: 'input', label: '8', token: '8', group: 'digit' },
+  { kind: 'input', label: '9', token: '9', group: 'digit' },
+  { kind: 'input', label: '×', token: '*', group: 'operator', name: 'multiply' },
+  { kind: 'input', label: '4', token: '4', group: 'digit' },
+  { kind: 'input', label: '5', token: '5', group: 'digit' },
+  { kind: 'input', label: '6', token: '6', group: 'digit' },
+  { kind: 'input', label: '−', token: '-', group: 'operator', name: 'minus' },
+  { kind: 'input', label: '1', token: '1', group: 'digit' },
+  { kind: 'input', label: '2', token: '2', group: 'digit' },
+  { kind: 'input', label: '3', token: '3', group: 'digit' },
+  { kind: 'input', label: '+', token: '+', group: 'operator', name: 'plus' },
+  { kind: 'input', label: '0', token: '0', group: 'digit' },
+  { kind: 'input', label: '.', token: '.', group: 'digit', name: 'decimal point' },
+  { kind: 'action', label: '=', action: 'submit', group: 'equals', name: 'equals' },
 ]
 
 /** The button grid. Purely presentational: props in, JSX out. */
 export function Keypad({ onInput, onSubmit, onDelete, onClear }: KeypadProps) {
-  const actionFor = (spec: KeySpec): (() => void) => {
-    if (spec.token !== null) {
-      const token = spec.token
-      return () => onInput(token)
-    }
-    switch (spec.name) {
-      case 'clear':
-        return onClear
-      case 'delete':
-        return onDelete
-      default:
-        return onSubmit
-    }
+  const actions: Record<'clear' | 'delete' | 'submit', () => void> = {
+    clear: onClear,
+    delete: onDelete,
+    submit: onSubmit,
   }
 
   return (
@@ -73,7 +59,7 @@ export function Keypad({ onInput, onSubmit, onDelete, onClear }: KeypadProps) {
           label={spec.label}
           name={spec.name}
           group={spec.group}
-          onPress={actionFor(spec)}
+          onPress={spec.kind === 'input' ? () => onInput(spec.token) : actions[spec.action]}
         />
       ))}
     </div>
