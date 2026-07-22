@@ -1,15 +1,25 @@
+/** Tone groups a key can belong to; each maps to a `key--<group>` class. */
+export type KeyGroup = 'digit' | 'operator' | 'action' | 'equals'
+
 interface KeyProps {
   /** Visible caption. */
   label: string
   /** Accessible name when the visible caption alone is unclear (e.g. "⌫"). */
   name?: string
+  /** Tone group: digits, operators, actions, equals. */
+  group: KeyGroup
   onPress(): void
 }
 
 /** One keypad button. Purely presentational: props in, JSX out. */
-export function Key({ label, name, onPress }: KeyProps) {
+export function Key({ label, name, group, onPress }: KeyProps) {
   return (
-    <button type="button" aria-label={name} onClick={onPress}>
+    <button
+      type="button"
+      className={`key key--${group}`}
+      aria-label={name}
+      onClick={onPress}
+    >
       {label}
     </button>
   )

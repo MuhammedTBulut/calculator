@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import type { CalculatorApi } from './api/client'
 import { useCalculator } from './hooks/useCalculator'
 import { Display } from './components/Display'
@@ -13,14 +13,28 @@ interface AppProps {
 function App({ api }: AppProps) {
   const calc = useCalculator(api)
   const { handleKey } = calc
+  const calcRef = useRef<HTMLElement>(null)
 
-  // Keyboard input works anywhere on the page, not only with a focused
-  // button; handled keys are consumed so e.g. '/' cannot trigger browser
-  // quick-find.
+  // Typing works when the calculator owns focus or nothing interactive does.
+  // Two accessibility rules shape this handler (review checkpoint 4):
+  // APG button pattern — a focused control keeps native Enter/Space
+  // activation, so those are never intercepted on interactive elements; and
+  // WCAG 2.1.4 — printable-character shortcuts stay scoped: with focus in
+  // another interactive component (e.g. history), keys are left alone.
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.ctrlKey || e.metaKey || e.altKey) {
         return
+      }
+      const target = e.target instanceof Element ? e.target : null
+      const interactive = target?.closest('button, a, input, select, textarea')
+      if (interactive) {
+        if (!calcRef.current?.contains(interactive)) {
+          return
+        }
+        if (e.key === 'Enter' || e.key === ' ') {
+          return
+        }
       }
       if (handleKey(e.key)) {
         e.preventDefault()
@@ -31,22 +45,24 @@ function App({ api }: AppProps) {
   }, [handleKey])
 
   return (
-    <main>
-      <h1>Calculator</h1>
-      <Display expression={calc.expression} error={calc.error} loading={calc.loading} />
-      {calc.canRetry && (
-        <button type="button" onClick={calc.submit}>
-          Retry
-        </button>
-      )}
-      <Keypad
-        onInput={calc.append}
-        onSubmit={calc.submit}
-        onDelete={calc.deleteLast}
-        onClear={calc.clear}
-      />
+    <div className="bench">
+      <main className="calc" aria-label="calculator" ref={calcRef}>
+        <h1 className="calc__nameplate">Calculator</h1>
+        <Display expression={calc.expression} error={calc.error} loading={calc.loading} />
+        {calc.canRetry && (
+          <button type="button" className="retry" onClick={calc.submit}>
+            Retry
+          </button>
+        )}
+        <Keypad
+          onInput={calc.append}
+          onSubmit={calc.submit}
+          onDelete={calc.deleteLast}
+          onClear={calc.clear}
+        />
+      </main>
       <HistoryPanel history={calc.history} onRecall={calc.recall} />
-    </main>
+    </div>
   )
 }
 
