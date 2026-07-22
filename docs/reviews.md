@@ -98,3 +98,30 @@ has no per-operation home for them) and asserted directly in tests.
 for unexpected errors, 400 for malformed/XOR shape errors, 422 for
 empty-operand arity and domain errors, and exact-origin CORS with no grant
 for foreign origins.
+
+## Checkpoint 4 — Accessibility & design (Prompt 6, branch `feat/visual-design`)
+
+- Date: 2026-07-22 · Reviewer: OpenAI Codex (model `gpt-5.6-sol`, Codex CLI 0.145.0)
+- Reviewer verdict: "changes requested — the visual direction is sound, but the
+  global keyboard handling creates two accessibility failures." Seven findings,
+  all accepted (two as claim/documentation corrections).
+
+| # | Sev. | Finding | Resolution |
+|---|------|---------|------------|
+| 1 | High | The window key handler intercepted Enter with preventDefault, so Enter on a focused button (Clear, a digit, Retry, history) submitted instead of activating it — violating the APG button pattern while Space still worked | **Accepted.** Interactive targets keep native Enter/Space; pinned by a test that focuses Clear, presses Enter, and asserts clear-not-submit (`App.tsx`) |
+| 2 | High | Page-wide printable-character shortcuts fired regardless of focus, violating WCAG 2.1.4 (no scoping, no disable) | **Accepted.** Printable keys are scoped: with focus inside another interactive component (e.g. history) they are left alone; typing works when the calculator owns focus or nothing interactive does. Pinned by a focus-history-and-type test |
+| 3 | Med | Packet overcounted "12 RTL tests" (8 RTL + 4 unit), two tests contradicted the "role/name only" claim via `querySelector('[data-fault]')`, and the caret test proved almost nothing | **Accepted.** Claim corrected here; the `data-fault` queries stay for presentation-detail assertions (documented as such); caret test now asserts class, emptiness, and position after the full expression; added an every-key-has-a-name test (23 names) |
+| 4 | Med | The readout is a horizontal scroller, but a fault in a long expression could sit out of view with no keyboard route to scroll it | **Accepted.** Readout is focusable (`tabIndex=0`, arrow-key scrolling per scrollable-region guidance) and the fault scrolls itself into view on render (`Display.tsx`) |
+| 5 | Low | "character N" used the UTF-16 index, not the character ordinal — wrong whenever astral characters precede the fault | **Accepted.** `faultRange` now returns `charIndex` (code-point ordinal); the alert uses it; surrogate-pair test pins index 2 ≠ ordinal 1 (`position.ts`) |
+| 6 | Low | `KeySpec` let `name` double as accessibility text and control flow, silently mapping unknown null-token keys to Submit; `Key` widened `group` to `string` | **Accepted.** Discriminated union `{kind:'input',token}` / `{kind:'action',action}`; `KeyGroup` union type exported by `Key` (`Keypad.tsx`, `Key.tsx`) |
+| 7 | Low | The "accent only for C/needle/error strip" claim omitted Retry | **Accepted (claim revised).** Retry is part of the fault-and-recovery treatment; the CSS header now says so and carries the reviewer's verified contrast figures (6.61:1, 5.48:1, 4.27:1, 4.85:1, 13.5:1, 11.97:1) |
+
+**Answers adopted from the reviewer's Q&A:** (a) the fault character keeps the
+normal glyph color — the layering is sound (glyph 13.51:1 on the lamp, needle
+≥3:1 against both adjacent colors per WCAG 1.4.11); (b) plain-button Tab
+traversal stays — a calculator keypad does not warrant an ARIA grid, which
+would impose a composite-widget tab stop and author-managed arrow keys.
+
+**Reviewer agreed with:** the two-tone direction, needle-red accent choice,
+tone/weight key grouping, the removed fourth key tone, no-webfont mono stack,
+and confirmed no hexagonal-lite/domain-purity/parse-don't-validate violations.
