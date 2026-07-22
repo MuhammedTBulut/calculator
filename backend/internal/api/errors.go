@@ -21,6 +21,7 @@ const (
 	CodeUnknownFunction  = "UNKNOWN_FUNCTION"
 	CodeRequestTooLarge  = "REQUEST_TOO_LARGE"
 	CodeUnsupportedMedia = "UNSUPPORTED_MEDIA_TYPE"
+	CodeRateLimited      = "RATE_LIMITED"
 	CodeMethodNotAllowed = "METHOD_NOT_ALLOWED"
 	CodeNotFound         = "NOT_FOUND"
 	CodeInternal         = "INTERNAL"
