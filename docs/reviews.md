@@ -126,6 +126,15 @@ would impose a composite-widget tab stop and author-managed arrow keys.
 tone/weight key grouping, the removed fourth key tone, no-webfont mono stack,
 and confirmed no hexagonal-lite/domain-purity/parse-don't-validate violations.
 
+> **Superseded visually (Prompt 10).** The "precision instrument" palette
+> reviewed here was later replaced by the delivered Sezzle-branded design, so
+> the specific colour findings above are a record of that checkpoint rather
+> than a description of the shipped UI. What survived the redesign is what the
+> review was really about: the fault-position marker, both themes carrying
+> their own verified contrast, scoped keyboard shortcuts, and native button
+> activation. Current appearance is evidenced in
+> [`visual-evidence.md`](visual-evidence.md).
+
 ## Checkpoint 5 — Final architecture claims (before Prompt 8, branch `feat/documentation`)
 
 - Date: 2026-07-22 · Reviewer: OpenAI Codex (model `gpt-5.6-sol`, Codex CLI 0.145.0)
