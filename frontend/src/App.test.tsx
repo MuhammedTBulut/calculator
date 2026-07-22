@@ -92,6 +92,40 @@ describe('calculator', () => {
     expect(api.evaluate).toHaveBeenCalledWith('8/2')
   })
 
+  it('underlines the exact failing character and names it in the alert', async () => {
+    const api = apiReturning({
+      ok: false,
+      code: 'SYNTAX_ERROR',
+      message: 'unexpected operator "+"',
+      position: 2, // byte offset of the second '+' in 2++3
+    })
+    const { container } = render(<App api={api} />)
+
+    await clickKeys(['2', 'plus', 'plus', '3', 'equals'])
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('Check the expression — character 3')
+
+    const fault = container.querySelector('[data-fault]')
+    expect(fault).not.toBeNull()
+    expect(fault).toHaveTextContent('+')
+  })
+
+  it('marks an unexpected end of input with a caret after the expression', async () => {
+    const api = apiReturning({
+      ok: false,
+      code: 'SYNTAX_ERROR',
+      message: 'unexpected end of expression',
+      position: 3, // == expression length for "(2+"
+    })
+    const { container } = render(<App api={api} />)
+
+    await clickKeys(['open parenthesis', '2', 'plus', 'equals'])
+
+    await screen.findByRole('alert')
+    expect(container.querySelector('[data-fault]')).not.toBeNull()
+  })
+
   it('clears a previous error as soon as new input arrives', async () => {
     const api = apiReturning({ ok: false, code: 'SYNTAX_ERROR', message: 'x' })
     render(<App api={api} />)

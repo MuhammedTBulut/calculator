@@ -11,12 +11,21 @@ export function HistoryPanel({ history, onRecall }: HistoryPanelProps) {
     return null
   }
   return (
-    <section aria-label="history">
-      <ul>
+    <section className="history" aria-label="history">
+      <h2 className="history__title">History</h2>
+      <ul className="history__list">
         {history.map((entry, i) => (
           <li key={`${i}-${entry.expression}`}>
-            <button type="button" onClick={() => onRecall(entry)}>
-              {entry.expression} = {entry.result}
+            <button
+              type="button"
+              className="history__entry"
+              // The visual layout splits the equation across two spans; the
+              // label restores the natural spoken form.
+              aria-label={`${entry.expression} = ${entry.result}`}
+              onClick={() => onRecall(entry)}
+            >
+              <span className="history__expression">{entry.expression}</span>
+              <span className="history__result">{entry.result}</span>
             </button>
           </li>
         ))}

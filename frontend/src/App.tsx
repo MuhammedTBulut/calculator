@@ -31,22 +31,24 @@ function App({ api }: AppProps) {
   }, [handleKey])
 
   return (
-    <main>
-      <h1>Calculator</h1>
-      <Display expression={calc.expression} error={calc.error} loading={calc.loading} />
-      {calc.canRetry && (
-        <button type="button" onClick={calc.submit}>
-          Retry
-        </button>
-      )}
-      <Keypad
-        onInput={calc.append}
-        onSubmit={calc.submit}
-        onDelete={calc.deleteLast}
-        onClear={calc.clear}
-      />
+    <div className="bench">
+      <main className="calc" aria-label="calculator">
+        <h1 className="calc__nameplate">Calculator</h1>
+        <Display expression={calc.expression} error={calc.error} loading={calc.loading} />
+        {calc.canRetry && (
+          <button type="button" className="retry" onClick={calc.submit}>
+            Retry
+          </button>
+        )}
+        <Keypad
+          onInput={calc.append}
+          onSubmit={calc.submit}
+          onDelete={calc.deleteLast}
+          onClear={calc.clear}
+        />
+      </main>
       <HistoryPanel history={calc.history} onRecall={calc.recall} />
-    </main>
+    </div>
   )
 }
 

@@ -8,36 +8,74 @@ interface KeypadProps {
 }
 
 /**
- * Key layout as label/token pairs. A null token marks the action keys that
- * do not append to the buffer. "sqrt(" is one token: the function name is
- * only meaningful with its opening parenthesis.
+ * Physical-calculator row order: actions and functions above, the digit
+ * block below, equals anchoring the corner. `group` maps to tone classes —
+ * key groups are distinguished by weight and tone, not color.
  */
-const inputKeys: Array<{ label: string; token: string; name?: string }> = [
-  { label: '7', token: '7' }, { label: '8', token: '8' }, { label: '9', token: '9' },
-  { label: '4', token: '4' }, { label: '5', token: '5' }, { label: '6', token: '6' },
-  { label: '1', token: '1' }, { label: '2', token: '2' }, { label: '3', token: '3' },
-  { label: '0', token: '0' }, { label: '.', token: '.', name: 'decimal point' },
-  { label: '+', token: '+', name: 'plus' },
-  { label: '−', token: '-', name: 'minus' },
-  { label: '×', token: '*', name: 'multiply' },
-  { label: '÷', token: '/', name: 'divide' },
-  { label: '^', token: '^', name: 'power' },
-  { label: '%', token: '%', name: 'percent' },
-  { label: '√', token: 'sqrt(', name: 'square root' },
-  { label: '(', token: '(', name: 'open parenthesis' },
-  { label: ')', token: ')', name: 'close parenthesis' },
+type KeyGroup = 'digit' | 'operator' | 'action' | 'equals'
+
+interface KeySpec {
+  label: string
+  name?: string
+  group: KeyGroup
+  /** Token appended to the buffer; null marks an action key. */
+  token: string | null
+}
+
+const layout: KeySpec[] = [
+  { label: 'C', name: 'clear', group: 'action', token: null },
+  { label: '⌫', name: 'delete', group: 'action', token: null },
+  { label: '(', name: 'open parenthesis', group: 'operator', token: '(' },
+  { label: ')', name: 'close parenthesis', group: 'operator', token: ')' },
+  { label: '√', name: 'square root', group: 'operator', token: 'sqrt(' },
+  { label: '^', name: 'power', group: 'operator', token: '^' },
+  { label: '%', name: 'percent', group: 'operator', token: '%' },
+  { label: '÷', name: 'divide', group: 'operator', token: '/' },
+  { label: '7', group: 'digit', token: '7' },
+  { label: '8', group: 'digit', token: '8' },
+  { label: '9', group: 'digit', token: '9' },
+  { label: '×', name: 'multiply', group: 'operator', token: '*' },
+  { label: '4', group: 'digit', token: '4' },
+  { label: '5', group: 'digit', token: '5' },
+  { label: '6', group: 'digit', token: '6' },
+  { label: '−', name: 'minus', group: 'operator', token: '-' },
+  { label: '1', group: 'digit', token: '1' },
+  { label: '2', group: 'digit', token: '2' },
+  { label: '3', group: 'digit', token: '3' },
+  { label: '+', name: 'plus', group: 'operator', token: '+' },
+  { label: '0', group: 'digit', token: '0' },
+  { label: '.', name: 'decimal point', group: 'digit', token: '.' },
+  { label: '=', name: 'equals', group: 'equals', token: null },
 ]
 
 /** The button grid. Purely presentational: props in, JSX out. */
 export function Keypad({ onInput, onSubmit, onDelete, onClear }: KeypadProps) {
+  const actionFor = (spec: KeySpec): (() => void) => {
+    if (spec.token !== null) {
+      const token = spec.token
+      return () => onInput(token)
+    }
+    switch (spec.name) {
+      case 'clear':
+        return onClear
+      case 'delete':
+        return onDelete
+      default:
+        return onSubmit
+    }
+  }
+
   return (
-    <div role="group" aria-label="keypad">
-      {inputKeys.map(({ label, token, name }) => (
-        <Key key={token} label={label} name={name} onPress={() => onInput(token)} />
+    <div className="keypad" role="group" aria-label="keypad">
+      {layout.map((spec) => (
+        <Key
+          key={spec.label}
+          label={spec.label}
+          name={spec.name}
+          group={spec.group}
+          onPress={actionFor(spec)}
+        />
       ))}
-      <Key label="⌫" name="delete" onPress={onDelete} />
-      <Key label="C" name="clear" onPress={onClear} />
-      <Key label="=" name="equals" onPress={onSubmit} />
     </div>
   )
 }
