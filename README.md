@@ -17,6 +17,11 @@ from zero, the latest pending operator wins, decimals are normalized, digits
 start a fresh calculation after a result, operators continue from that result,
 and repeated equals reapplies the last binary operation.
 
+**[docs/visual-evidence.md](docs/visual-evidence.md)** shows the responsive
+layout at five viewport sizes, both themes, and every error state — captured
+by tests that assert each state before photographing it, so the images cannot
+drift from the code.
+
 ## Quick start with Docker
 
 Prerequisite: Docker with Compose v2.
