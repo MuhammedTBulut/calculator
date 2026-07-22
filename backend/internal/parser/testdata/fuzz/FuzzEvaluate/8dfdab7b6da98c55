@@ -1,0 +1,2 @@
+go test fuzz v1
+string("1%^2^70*00.1^2^100")

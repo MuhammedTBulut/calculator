@@ -1,0 +1,221 @@
+openapi: 3.0.3
+info:
+  title: Calculator API
+  description: >
+    Full-stack calculator backend. Errors use a stable machine-readable code
+    envelope; `position` is present exactly when the code is SYNTAX_ERROR and
+    is a 0-based byte offset into the submitted expression (range
+    [0, len(expression)]; the endpoint means "unexpected end of input").
+
+
+    Transport policy (applies to every route, not repeated per operation): a
+    known route called with an unsupported method returns an enveloped 405
+    METHOD_NOT_ALLOWED with the mandatory Allow header; an unknown path
+    returns an enveloped 404 NOT_FOUND; GET routes also serve HEAD. A request
+    Content-Type other than application/json is rejected with an enveloped
+    415 UNSUPPORTED_MEDIA_TYPE; an absent Content-Type is treated as JSON.
+  version: 1.0.0
+servers:
+  - url: /
+paths:
+  /api/v1/calculate:
+    post:
+      summary: Execute one named operation or evaluate an infix expression
+      operationId: calculate
+      requestBody:
+        required: true
+        description: Encoded request body maximum is 1024 bytes.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CalculateRequest"
+      responses:
+        "200":
+          description: Successful calculation
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/XRequestID"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CalculateResponse"
+        "400":
+          description: Malformed request (bad JSON, wrong shape, null fields, trailing data)
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/XRequestID"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "413":
+          description: Encoded request body exceeds 1024 bytes
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/XRequestID"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "415":
+          description: Content-Type present but not application/json
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/XRequestID"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "422":
+          description: Well-formed request whose content fails domain rules
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/XRequestID"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "500":
+          description: Internal error (details redacted and logged server-side)
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/XRequestID"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+  /api/v1/operations:
+    get:
+      summary: List available operations for UI discovery
+      operationId: listOperations
+      responses:
+        "200":
+          description: Registered operations, sorted by name
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/XRequestID"
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Operation"
+  /health:
+    get:
+      summary: Liveness probe
+      operationId: health
+      responses:
+        "200":
+          description: Service is up
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/XRequestID"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+components:
+  headers:
+    XRequestID:
+      description: >
+        Correlates the response with the server's structured log line. An
+        inbound X-Request-ID is echoed; otherwise one is generated. Exposed
+        to browser scripts via Access-Control-Expose-Headers.
+      schema:
+        type: string
+  schemas:
+    CalculateRequest:
+      description: Exactly one of the two request forms.
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required: [operation, operands]
+          properties:
+            operation:
+              type: string
+              example: divide
+            operands:
+              type: array
+              items:
+                type: number
+              example: [10, 2]
+        - type: object
+          additionalProperties: false
+          required: [expression]
+          properties:
+            expression:
+              type: string
+              example: 2+3*4
+    CalculateResponse:
+      type: object
+      additionalProperties: false
+      required: [result]
+      properties:
+        result:
+          type: number
+          example: 12
+    Operation:
+      type: object
+      additionalProperties: false
+      required: [name, arity, symbol]
+      properties:
+        name:
+          type: string
+          example: add
+        arity:
+          type: integer
+          minimum: 1
+          example: 2
+        symbol:
+          type: string
+          example: "+"
+    HealthResponse:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [ok]
+    ErrorEnvelope:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          oneOf:
+            - type: object
+              additionalProperties: false
+              required: [code, message]
+              properties:
+                code:
+                  type: string
+                  enum:
+                    - INVALID_REQUEST
+                    - DIVISION_BY_ZERO
+                    - NEGATIVE_SQRT
+                    - INVALID_OPERAND
+                    - OVERFLOW
+                    - ARITY_MISMATCH
+                    - UNKNOWN_OPERATION
+                    - UNKNOWN_FUNCTION
+                    - REQUEST_TOO_LARGE
+                    - UNSUPPORTED_MEDIA_TYPE
+                    - METHOD_NOT_ALLOWED
+                    - NOT_FOUND
+                    - INTERNAL
+                message:
+                  type: string
+            - type: object
+              additionalProperties: false
+              required: [code, message, position]
+              properties:
+                code:
+                  type: string
+                  enum: [SYNTAX_ERROR]
+                message:
+                  type: string
+                position:
+                  type: integer
+                  minimum: 0
+                  description: 0-based byte offset of the offending character.

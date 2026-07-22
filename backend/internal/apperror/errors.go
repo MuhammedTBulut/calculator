@@ -5,7 +5,10 @@
 // dependency direction (api → parser → calculator).
 package apperror
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+)
 
 // Sentinel errors for the calculator domain. Callers match with errors.Is;
 // they never compare messages.
@@ -29,4 +32,29 @@ var (
 
 	// ErrUnknownOperation reports a lookup of an unregistered operation name.
 	ErrUnknownOperation = errors.New("unknown operation")
+
+	// ErrSyntax reports a malformed expression. Errors carrying a position
+	// wrap it via SyntaxError; match the class with errors.Is(err, ErrSyntax)
+	// and extract the position with errors.As.
+	ErrSyntax = errors.New("syntax error")
+
+	// ErrUnknownFunction reports a call to a function name the evaluator does
+	// not recognize.
+	ErrUnknownFunction = errors.New("unknown function")
 )
+
+// SyntaxError couples ErrSyntax with the byte offset where the input became
+// invalid, so the adapter can point at the failing character. Position is
+// 0-based; for an unexpected end of input it equals len(input).
+type SyntaxError struct {
+	Position int
+	Reason   string
+}
+
+// Error implements the error interface.
+func (e *SyntaxError) Error() string {
+	return fmt.Sprintf("syntax error at position %d: %s", e.Position, e.Reason)
+}
+
+// Unwrap makes errors.Is(err, ErrSyntax) hold for every SyntaxError.
+func (e *SyntaxError) Unwrap() error { return ErrSyntax }
