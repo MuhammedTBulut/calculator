@@ -13,6 +13,8 @@ import (
 )
 
 // Operation is a named arithmetic operation with a fixed number of operands.
+// Implementations must behave as immutable values: Name and Arity are read at
+// registration time and must never change afterwards.
 type Operation interface {
 	// Name returns the unique identifier the Registry looks the operation up by.
 	Name() string

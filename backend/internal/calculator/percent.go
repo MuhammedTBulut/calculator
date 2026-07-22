@@ -14,7 +14,8 @@ func (p Percent) Apply(operands ...float64) (float64, error) {
 	if err := checkOperands(p, operands); err != nil {
 		return 0, err
 	}
-	// NOTE: unary x/100 mirrors the % key on physical calculators; the binary
+	// NOTE: fixed unary contract, percent(x) = x/100. Physical calculators
+	// treat % context-sensitively, so no equivalence is claimed; the binary
 	// reading ("x percent of y") was rejected as it composes from multiply.
 	return checkResult(p, operands[0]/100)
 }
