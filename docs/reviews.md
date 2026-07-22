@@ -125,3 +125,42 @@ would impose a composite-widget tab stop and author-managed arrow keys.
 **Reviewer agreed with:** the two-tone direction, needle-red accent choice,
 tone/weight key grouping, the removed fourth key tone, no-webfont mono stack,
 and confirmed no hexagonal-lite/domain-purity/parse-don't-validate violations.
+
+## Checkpoint 5 — Final architecture claims (before Prompt 8, branch `feat/documentation`)
+
+- Date: 2026-07-22 · Reviewer: OpenAI Codex (model `gpt-5.6-sol`, Codex CLI 0.145.0)
+- Unlike earlier checkpoints this one reviewed **claims, not just code**: the
+  packet listed every architectural assertion about to be published in the
+  README and ADRs, and asked which were false or overstated under the evidence
+  rule in `docs/prompts.md`. Four were.
+
+| # | Claim under review | Verdict and resolution |
+|---|--------------------|------------------------|
+| 1 | "Dependency direction is strictly `api → parser → calculator`" | **Overstated.** `internal/api` names `calculator.Info` directly, and both domain packages depend on `internal/apperror`, so the graph is not a chain. **Published instead:** dependencies point *inward* — the domain never references the adapter or transport. |
+| 2 | "The domain core imports no transport — enforced" | **Was unenforced.** No import-rule test existed. **Added** `TestDomainImportBoundaries` (+ `TestNothingDependsOnTheAdapter`, `TestDomainCarriesNoJSONTags`) in `backend/internal/architecture_test.go`, using `go/build` so build constraints apply and test-only imports stay legal. Verified to fail when violated. |
+| 3 | "Every recorded response is validated against the OpenAPI contract" | **False.** Several suites bypass the validating helper (404/405 tests, isolated middleware tests, composition-root tests, exempt `OPTIONS`), and the spec does not define 404/405 as operation responses. **Published the narrower true scope** in the README's testing section. |
+| 4 | "The parser never panics" | **Overstated** — a finite fuzz campaign plus corpus is evidence, not proof. **Published** as panic freedom *for the inputs explored*, quoting the campaign size and corpus count. |
+| 5 | "All calculator state lives in `useCalculator`; components are presentational" | **False after the polish stage.** `Display` owns width measurement, `Key` owns its animation, theme and key feedback live in their own hooks. **Resolution:** CLAUDE.md rule refined to separate calculation state (hook, mandatory) from strictly view-local state, and the README states the accurate version. The constitution changed because the code's shape was defensible — not to paper over drift. |
+| 6 | LSP claim "every implementation honors the contract" | **Overstated.** The registry *defensively enforces* invariants for any operation; it cannot guarantee semantics. Reworded, citing `TestExecuteEnforcesInvariantsOnNonConformingOperations`. |
+| 7 | "Parse, don't validate" at the boundary | **Partially supported.** Presence-aware strict parsing is real, but no domain sum type makes invalid states unrepresentable. README now says exactly that, and cites King's distinction rather than borrowing its strongest form. |
+| 8 | Measured evidence | **Inconsistent.** Coverage figures predated the rate-limiting and polish stages, and the benchmark appeared nowhere in the repo. **Re-measured** (backend 88.4%, frontend 94.14%) and the benchmark output is now quoted with its reproduction command. |
+
+**Rebuttals:** none — every finding was accepted.
+
+**Answers adopted from the reviewer's Q&A:** (a) the import-rule test uses
+`go/build` rather than `go list -deps` (transitive and text-fragile) or a raw
+AST walk (mishandles build constraints); `golang.org/x/tools/go/packages` was
+rejected only to avoid a second third-party test dependency. (b) the in-memory
+rate limiter is correctly placed in `internal/api`: client identity, admission,
+`429`, and `Retry-After` are transport policy. It makes the adapter *stateful*,
+not impure — with the constraints (mutex, idle eviction, trusted-proxy
+configuration, per-process quota) documented rather than implied.
+
+**Reviewer noted, and the README records:** the limiter wraps the handler, so
+malformed and wrong-media-type POSTs to `/api/v1/calculate` also consume quota.
+
+**Reviewer agreed with:** all five planned ADRs as supportable (with 001 scoped
+to production backend HTTP and 004 avoiding any claim that frontend and backend
+share a process), the status taxonomy, the float64 trade-off with its financial
+caveat, the process-local rate-limit disclosure, and that `src/lib` helpers are
+genuinely pure.
