@@ -84,6 +84,129 @@ func TestCORSActualRequestCarriesGrant(t *testing.T) {
 	}
 }
 
+func TestRateLimiterAllowsBurstThenReturns429(t *testing.T) {
+	limiter, err := api.NewRateLimiter(api.RateLimitConfig{RequestsPerMinute: 60, Burst: 2})
+	if err != nil {
+		t.Fatalf("NewRateLimiter: %v", err)
+	}
+	called := 0
+	h := limiter.Middleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		called++
+		w.WriteHeader(http.StatusNoContent)
+	}))
+
+	for i := 0; i < 2; i++ {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/calculate", nil)
+		req.RemoteAddr = "203.0.113.8:54321"
+		h.ServeHTTP(rec, req)
+		if rec.Code != http.StatusNoContent {
+			t.Fatalf("burst request %d status = %d, want 204", i+1, rec.Code)
+		}
+	}
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/calculate", nil)
+	req.RemoteAddr = "203.0.113.8:54321"
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("excess request status = %d, want 429", rec.Code)
+	}
+	if got := rec.Header().Get("Retry-After"); got != "1" {
+		t.Fatalf("Retry-After = %q, want 1", got)
+	}
+	if env := decodeError(t, rec.Body.String()); env.Error.Code != api.CodeRateLimited {
+		t.Fatalf("code = %q, want RATE_LIMITED", env.Error.Code)
+	}
+	if called != 2 {
+		t.Fatalf("downstream called %d times, want 2", called)
+	}
+}
+
+func TestRateLimitResponseMatchesOpenAPIContract(t *testing.T) {
+	limiter, err := api.NewRateLimiter(api.RateLimitConfig{RequestsPerMinute: 60, Burst: 1})
+	if err != nil {
+		t.Fatalf("NewRateLimiter: %v", err)
+	}
+	h := limiter.Middleware(newStack(t))
+
+	req := jsonRequest(http.MethodPost, "/api/v1/calculate", `{"expression":"1+1"}`)
+	if rec := do(t, h, req); rec.Code != http.StatusOK {
+		t.Fatalf("initial status = %d, want 200", rec.Code)
+	}
+	req = jsonRequest(http.MethodPost, "/api/v1/calculate", `{"expression":"1+1"}`)
+	rec := do(t, h, req)
+	if rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("limited status = %d, want 429", rec.Code)
+	}
+}
+
+func TestRateLimiterSeparatesClientsAndExemptsHealth(t *testing.T) {
+	limiter, err := api.NewRateLimiter(api.RateLimitConfig{RequestsPerMinute: 60, Burst: 1})
+	if err != nil {
+		t.Fatalf("NewRateLimiter: %v", err)
+	}
+	h := limiter.Middleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+
+	for _, remote := range []string{"203.0.113.10:1000", "203.0.113.11:1000"} {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/calculate", nil)
+		req.RemoteAddr = remote
+		h.ServeHTTP(rec, req)
+		if rec.Code != http.StatusNoContent {
+			t.Fatalf("first request from %s status = %d, want 204", remote, rec.Code)
+		}
+	}
+
+	for i := 0; i < 3; i++ {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/health", nil)
+		req.RemoteAddr = "203.0.113.10:1000"
+		h.ServeHTTP(rec, req)
+		if rec.Code != http.StatusNoContent {
+			t.Fatalf("health request %d status = %d, want 204", i+1, rec.Code)
+		}
+	}
+}
+
+func TestRateLimiterUsesOverwrittenProxyIPOnlyWhenTrusted(t *testing.T) {
+	limiter, err := api.NewRateLimiter(api.RateLimitConfig{
+		RequestsPerMinute: 60,
+		Burst:             1,
+		TrustProxy:        true,
+	})
+	if err != nil {
+		t.Fatalf("NewRateLimiter: %v", err)
+	}
+	h := limiter.Middleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+
+	for _, clientIP := range []string{"198.51.100.10", "198.51.100.11"} {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/calculate", nil)
+		req.RemoteAddr = "172.18.0.2:4000"
+		req.Header.Set("X-Real-IP", clientIP)
+		h.ServeHTTP(rec, req)
+		if rec.Code != http.StatusNoContent {
+			t.Fatalf("first request from forwarded client %s status = %d, want 204", clientIP, rec.Code)
+		}
+	}
+}
+
+func TestNewRateLimiterRejectsInvalidPolicy(t *testing.T) {
+	for _, cfg := range []api.RateLimitConfig{
+		{RequestsPerMinute: 0, Burst: 1},
+		{RequestsPerMinute: 60, Burst: 0},
+	} {
+		if _, err := api.NewRateLimiter(cfg); err == nil {
+			t.Fatalf("invalid policy %+v was accepted", cfg)
+		}
+	}
+}
+
 func TestRequestIDGeneratedAndEchoed(t *testing.T) {
 	h := newStack(t)
 
