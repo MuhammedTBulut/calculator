@@ -1,9 +1,53 @@
 # AI Prompts Used in This Project
 
-This project was built with Claude Code using the staged prompts below. Prompts were executed
-in order; each stage was reviewed, tested, and committed before moving to the next. The overall
-architecture, design decisions, and trade-offs were planned by me before any code generation —
-the prompts encode those decisions rather than delegate them.
+## Expert roles and team responsibilities
+
+Assign these responsibilities to the relevant AI agent, engineer, or reviewer for each stage.
+One contributor may cover multiple roles, but every responsibility must have an explicit owner:
+
+| Role | Responsibility in this project |
+| --- | --- |
+| Senior product designer | Information hierarchy, visual restraint, brand expression, interaction clarity, and removal of non-essential copy. |
+| Human-computer interaction specialist | Familiar calculator behavior, discoverability, input feedback, keyboard parity, and error recovery. |
+| Responsive UI engineer | Intrinsic sizing, viewport and aspect-ratio constraints, touch-target preservation, and portrait/landscape continuity. |
+| React/TypeScript architect | State ownership, presentational components, dependency boundaries, reusable formatting, and test seams. |
+| Go/API engineer | Typed domain errors, HTTP semantics, input limits, rate limiting, timeouts, and configuration. |
+| Accessibility specialist | Semantic controls, accessible names, focus behavior, reduced motion, contrast, live regions, and automated WCAG checks. |
+| Test and quality engineer | Unit, component, contract, race, fuzz, browser E2E, responsive, and regression coverage. |
+| Independent architecture reviewer | Adversarial review of assumptions, edge cases, claims, abstractions, and SOLID evidence. |
+
+## Governing engineering and design principles
+
+Apply these principles to every implementation and review stage:
+
+1. **Single source of truth:** parser expressions remain unchanged in calculator state and at
+   the API boundary; mathematical symbols and spoken labels are derived by one presentation
+   formatter.
+2. **Separation of concerns:** domain arithmetic, expression parsing, HTTP transport,
+   calculator state, presentation, theme, and key feedback have distinct owners.
+3. **SOLID with concrete evidence:** prefer small consumer-owned interfaces, constructor
+   injection, substitutable operations, focused components, and extension tables over switch
+   statements scattered across the application.
+4. **Ports and adapters:** dependencies point inward; HTTP and React are adapters around the
+   calculation rules rather than dependencies of those rules.
+5. **KISS and YAGNI:** avoid frameworks, global state, persistence, and abstractions that the
+   assignment does not require.
+6. **Responsive by construction:** use shared sizing constraints, fluid values, container and
+   aspect-ratio rules, and explicit layout modes; do not accumulate device-specific pixel
+   patches.
+7. **Accessibility as behavior:** keyboard interaction, focus, announcements, contrast,
+   reduced motion, and natural spoken math are acceptance criteria, not a final visual audit.
+8. **Native-calculator conventions:** zero-seeded operations, `AC`/`C`, repeat equals,
+   operator replacement, atomic function deletion, and result continuation should match
+   established user expectations unless the web context requires otherwise.
+9. **Progressive, restrained motion:** feedback must clarify an action, remain subtle, and be
+   disabled when reduced motion is requested.
+10. **Defense in depth:** validate at boundaries, cap request size, configure timeouts, avoid
+    internal-error leakage, and rate-limit only the expensive public calculation endpoint.
+11. **Test behavior and contracts:** assert observable outcomes and stable boundaries; combine
+    focused unit tests with a small real-backend browser suite.
+12. **Evidence over claims:** documentation, coverage, accessibility, responsiveness, and
+    architectural statements must be supported by code, tests, measurements, or references.
 
 ---
 
@@ -376,6 +420,120 @@ Implementation constraints used for this stage: keep all input state in
 against the real Go backend; test desktop and mobile Chromium; scan both themes
 for WCAG A/AA issues; add CI artifacts; do not perform an external deployment
 without repository/hosting authorization.
+
+---
+
+## Prompt 11 — Premium Sezzle product-design direction
+
+> Act as a senior product designer, HCI specialist, and React UI architect. Review current
+> calculator-product patterns and use Mobbin or other current references when accessible.
+> Redesign the application as a premium, corporate Sezzle calculator with Apple-like clarity,
+> spacing, control proportions, and restraint, but do not clone Apple. Remove the purple-led
+> palette and unnecessary explanatory copy. Preserve the multicolor line above the display as
+> the product signature, use a more vivid Sezzle orange for operator actions, and keep the
+> remaining palette neutral. Add light and dark themes through an accessible compact switch.
+> Keep the result surface intentionally dark where contrast and hierarchy benefit from it.
+>
+> Treat the supplied calculator screenshots as interaction and proportion references, not
+> assets to copy. Align every numeral and icon optically as well as geometrically. Use subtle
+> press feedback for pointer and keyboard input; the motion should feel physical, finish
+> quickly, and respect `prefers-reduced-motion`. Preserve the existing architecture and explain
+> any design judgment that materially changes behavior.
+
+Acceptance criteria used during this stage: the header retains a readable Sezzle lockup; theme
+controls do not dominate on mobile; key groups remain visually distinct; labels and icons are
+centered using shared key primitives; and decoration never competes with the calculation.
+
+---
+
+## Prompt 12 — Responsive system, not breakpoint patches
+
+> Responsiveness is a primary requirement. Audit the complete interface across narrow phones,
+> common phones, tablets, desktop windows, short landscape viewports, zoomed layouts, and long
+> expressions. The header, result display, and complete keypad must preserve one visual system
+> and remain usable when either width or height is constrained. Do not fix screenshots with
+> isolated device-specific offsets.
+>
+> Build an intrinsic sizing system using shared CSS custom properties, `clamp()`, container
+> constraints, safe viewport units, and explicit portrait/landscape layout modes. Preserve
+> touch-target usability while allowing keys and gaps to scale together. Keep the operator rail
+> continuous, prevent right-edge clipping, and ensure the display and keypad share the same
+> alignment geometry. Long input must reduce through measured density steps; completed results
+> that still do not fit should switch to scientific notation without changing the full numeric
+> value stored for the next operation.
+
+Verification requested: browser-level desktop and mobile viewport assertions, both themes,
+short-landscape coverage, no horizontal page overflow, and screenshots only as evidence rather
+than as the source of layout constants.
+
+---
+
+## Prompt 13 — Native calculator interaction model
+
+> Make the calculator behave like a familiar physical or system calculator while retaining the
+> expression API. Keep all transition rules in `useCalculator`, not in buttons or display
+> components.
+>
+> Required behavior:
+> - An operator pressed on an empty display starts from zero.
+> - A pending binary operator is replaced by the newest operator.
+> - Decimal input is normalized, duplicate decimal separators are ignored, and leading zeroes
+>   stay valid.
+> - `AC` is shown only when state is empty; it becomes `C` after input and returns to `AC` after
+>   the calculator is fully cleared.
+> - A result followed by a digit starts a fresh calculation; a result followed by an operator
+>   continues from that result.
+> - Repeated equals repeats the final binary operation.
+> - Missing closing parentheses are previewed and completed only at submission.
+> - Square root wraps the active operand and is displayed as `√(...)`; applying it to an empty
+>   calculator uses zero.
+> - Backspace treats parser-only function syntax such as `sqrt(` as one logical token once its
+>   argument is empty, so implementation text can never appear during deletion.
+> - The sign key changes the active operand, percentage remains postfix, and history recall
+>   restores the numeric result.
+> - Pointer and supported keyboard actions trigger the same key feedback. Unsupported printable
+>   keyboard input produces a short, actionable warning.
+>
+> Add behavior-focused tests for every transition, including result continuation, empty-state
+> operations, nested parentheses, square-root deletion with both the button and Backspace,
+> stale network responses, retryable errors, and rate-limit countdown behavior.
+
+---
+
+## Prompt 14 — Parser-safe mathematical presentation boundary
+
+> Audit every path that renders or announces an expression: active input, submitted expression,
+> scientific result, syntax-error underline, history, and accessible names. Find any place where
+> internal parser syntax (`sqrt`, `*`, `/`, ASCII `-`) can leak to the user.
+>
+> Implement one parser-to-presentation boundary instead of component-specific replacements.
+> Calculator state, history data, API requests, repeat-equals logic, and backend error offsets
+> must continue to use the untouched parser expression. The presentation layer should derive
+> visual math (`√`, `×`, `÷`, `−`) and explicit spoken phrases for assistive technology.
+> Preserve source ranges for multi-character parser tokens so an API byte-position error still
+> underlines the correct visible glyph after formatting. Make the vocabulary table the single
+> extension point for future functions and operators.
+>
+> Add focused tests for visual formatting, spoken formatting, source-range preservation, faults
+> inside multi-character tokens, unexpected-end carets, history rendering, and accessible
+> history labels. Then run lint, all frontend unit/component tests, the production build, and
+> desktop/mobile Playwright tests against the real Go backend.
+
+---
+
+## Prompt 15 — Final regression audit
+
+> Act as a senior QA engineer and architecture reviewer. Search for bugs similar to the
+> square-root deletion issue: partially exposed internal tokens, alternate rendering paths that
+> bypass the formatter, inconsistent pointer and keyboard transitions, stale async responses,
+> long-result clipping, inaccessible names, and responsive divergence between header, display,
+> and keypad. Read the implementation before proposing changes. Separate confirmed defects from
+> lower-priority design observations and identify the missing test for each confirmed defect.
+>
+> When a defect has a shared cause, repair the owning abstraction and add regression coverage;
+> do not patch each screenshot or component independently. Preserve user changes, avoid native
+> iOS or simulator work, and validate the final web application through lint, unit/component
+> tests, production build, accessibility checks, and real-backend desktop/mobile E2E tests.
 
 ---
 
