@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/MuhammedTBulut/calculator/backend/internal/apperror"
@@ -35,9 +36,13 @@ type Evaluator struct {
 }
 
 // NewEvaluator wires an Evaluator to the registry that will perform every
-// arithmetic step.
-func NewEvaluator(reg Registry) *Evaluator {
-	return &Evaluator{reg: reg}
+// arithmetic step. A nil registry is a wiring bug and is rejected here, at
+// the composition root, rather than surfacing as a panic mid-expression.
+func NewEvaluator(reg Registry) (*Evaluator, error) {
+	if reg == nil {
+		return nil, errors.New("new evaluator: nil registry")
+	}
+	return &Evaluator{reg: reg}, nil
 }
 
 // Evaluate parses and evaluates one infix expression. Errors are always
@@ -62,6 +67,17 @@ func (e *Evaluator) Evaluate(input string) (float64, error) {
 // panic, always a typed error" invariant against parser bugs (the fuzz test
 // leans on this).
 func (e *Evaluator) evalRPN(rpn []token) (float64, error) {
+	// Function names resolve before any arithmetic executes, so whether an
+	// expression is valid never depends on evaluation order — foo(4)+1/0 and
+	// 1/0+foo(4) both report the unknown function (parse, don't validate).
+	for _, t := range rpn {
+		if t.kind == tokIdent {
+			if _, known := functions[t.text]; !known {
+				return 0, fmt.Errorf("%q at position %d: %w", t.text, t.pos, apperror.ErrUnknownFunction)
+			}
+		}
+	}
+
 	stack := make([]float64, 0, 8)
 
 	pop := func() (float64, bool) {
@@ -91,9 +107,11 @@ func (e *Evaluator) evalRPN(rpn []token) (float64, error) {
 				if !ok {
 					return 0, malformed(t)
 				}
-				// NOTE: negation delegates as subtract(0, x) — exact in IEEE 754
-				// for every finite x — keeping "every arithmetic step goes
-				// through the registry" literally true without a negate op.
+				// NOTE: negation delegates as subtract(0, x), keeping "every
+				// arithmetic step goes through the registry" literally true
+				// without a negate op. Exact for every finite x except +0,
+				// where -0 normalizes to +0 — intentional: this calculator
+				// treats zero as unsigned (pinned by test).
 				result, err = e.reg.Execute("subtract", 0, x)
 			case "%":
 				x, ok := pop()
@@ -117,7 +135,9 @@ func (e *Evaluator) evalRPN(rpn []token) (float64, error) {
 		case tokIdent:
 			name, known := functions[t.text]
 			if !known {
-				return 0, fmt.Errorf("%q at position %d: %w", t.text, t.pos, apperror.ErrUnknownFunction)
+				// Unreachable after the preflight above; kept as defense in
+				// depth for the never-panic invariant.
+				return 0, malformed(t)
 			}
 			x, ok := pop()
 			if !ok {

@@ -47,7 +47,16 @@ func tokenize(input string) ([]token, error) {
 			i++
 		case c >= '0' && c <= '9' || c == '.':
 			start := i
+			seenDot := false
 			for i < len(input) && (input[i] >= '0' && input[i] <= '9' || input[i] == '.') {
+				// The second dot is reported at its own byte, not the token
+				// start — the UI underlines the exact offending character.
+				if input[i] == '.' {
+					if seenDot {
+						return nil, &apperror.SyntaxError{Position: i, Reason: "unexpected second decimal point in number"}
+					}
+					seenDot = true
+				}
 				i++
 			}
 			text := input[start:i]
@@ -73,10 +82,12 @@ func tokenize(input string) ([]token, error) {
 			tokens = append(tokens, token{kind: tokIdent, text: input[start:i], pos: start})
 		default:
 			// Decode a full rune so multi-byte garbage reads as one character
-			// in the message; the reported position stays a byte offset.
-			r, _ := utf8.DecodeRuneInString(input[i:])
+			// in the message; the reported position stays a byte offset. A
+			// genuine U+FFFD decodes with size 3 and is a normal unexpected
+			// character — only a 1-byte RuneError means broken encoding.
+			r, size := utf8.DecodeRuneInString(input[i:])
 			reason := fmt.Sprintf("unexpected character %q", r)
-			if r == utf8.RuneError {
+			if r == utf8.RuneError && size == 1 {
 				reason = "invalid UTF-8 byte"
 			} else if unicode.IsSpace(r) {
 				// Non-ASCII whitespace (NBSP etc.) is rejected, not skipped:
