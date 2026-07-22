@@ -5,6 +5,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -90,8 +91,30 @@ func TestCalculate(t *testing.T) {
 			wantStatus: http.StatusBadRequest, wantCode: api.CodeInvalidRequest},
 		{name: "trailing data", body: `{"expression":"1"} {"again":true}`,
 			wantStatus: http.StatusBadRequest, wantCode: api.CodeInvalidRequest},
-		{name: "oversized body", body: `{"expression":"` + strings.Repeat("1+", 600) + `1"}`,
+		{name: "stray closing brace", body: `{"expression":"1"} }`,
 			wantStatus: http.StatusBadRequest, wantCode: api.CodeInvalidRequest},
+
+		// Explicit null is presence with an invalid value, not absence.
+		{name: "null operation with expression", body: `{"expression":"1+1","operation":null}`,
+			wantStatus: http.StatusBadRequest, wantCode: api.CodeInvalidRequest},
+		{name: "null operands with expression", body: `{"expression":"1+1","operands":null}`,
+			wantStatus: http.StatusBadRequest, wantCode: api.CodeInvalidRequest},
+		{name: "null expression with operation", body: `{"operation":"add","operands":[],"expression":null}`,
+			wantStatus: http.StatusBadRequest, wantCode: api.CodeInvalidRequest},
+		{name: "operation not a string", body: `{"operation":5,"operands":[1]}`,
+			wantStatus: http.StatusBadRequest, wantCode: api.CodeInvalidRequest},
+		{name: "operands not an array", body: `{"operation":"add","operands":"nope"}`,
+			wantStatus: http.StatusBadRequest, wantCode: api.CodeInvalidRequest},
+
+		// 413: the body limit is part of the documented contract (RFC 9110).
+		{name: "oversized body", body: `{"expression":"` + strings.Repeat("1+", 600) + `1"}`,
+			wantStatus: http.StatusRequestEntityTooLarge, wantCode: api.CodeRequestTooLarge},
+		{name: "oversized via trailing whitespace", body: `{"expression":"1"}` + strings.Repeat(" ", 1200),
+			wantStatus: http.StatusRequestEntityTooLarge, wantCode: api.CodeRequestTooLarge},
+
+		// A valid JSON number beyond float64 is content, not shape.
+		{name: "operand beyond float64 range", body: `{"operation":"add","operands":[1e309,1]}`,
+			wantStatus: http.StatusUnprocessableEntity, wantCode: api.CodeInvalidOperand},
 
 		// 422: valid shape, domain rejection.
 		{name: "unknown operation", body: `{"operation":"modulo","operands":[5,2]}`,
@@ -189,6 +212,70 @@ func TestHealthEndpoint(t *testing.T) {
 	}
 	if got := strings.TrimSpace(rec.Body.String()); got != `{"status":"ok"}` {
 		t.Fatalf("body = %s, want {\"status\":\"ok\"}", got)
+	}
+}
+
+func TestContentTypeEnforcement(t *testing.T) {
+	h := newStack(t)
+
+	req := jsonRequest(http.MethodPost, "/api/v1/calculate", `{"expression":"1+1"}`)
+	req.Header.Set("Content-Type", "text/plain")
+	rec := do(t, h, req)
+	if rec.Code != http.StatusUnsupportedMediaType {
+		t.Fatalf("status = %d, want 415", rec.Code)
+	}
+	if env := decodeError(t, rec.Body.String()); env.Error.Code != api.CodeUnsupportedMedia {
+		t.Fatalf("code = %q, want UNSUPPORTED_MEDIA_TYPE", env.Error.Code)
+	}
+
+	// Absent Content-Type is documented leniency: treated as JSON.
+	req = jsonRequest(http.MethodPost, "/api/v1/calculate", `{"expression":"1+1"}`)
+	req.Header.Del("Content-Type")
+	if rec := do(t, h, req); rec.Code != http.StatusOK {
+		t.Fatalf("status without Content-Type = %d, want 200", rec.Code)
+	}
+}
+
+// 405/404 have no per-operation home in OpenAPI 3.0, so they are asserted
+// directly; the policy is documented globally in the spec's info section.
+func TestMethodNotAllowedEnvelope(t *testing.T) {
+	h := newStack(t)
+
+	tests := []struct {
+		method    string
+		path      string
+		wantAllow string
+	}{
+		{method: http.MethodGet, path: "/api/v1/calculate", wantAllow: "POST"},
+		{method: http.MethodDelete, path: "/api/v1/operations", wantAllow: "GET, HEAD"},
+		{method: http.MethodPost, path: "/health", wantAllow: "GET, HEAD"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.method+" "+tc.path, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			h.ServeHTTP(rec, httptest.NewRequest(tc.method, tc.path, nil))
+			if rec.Code != http.StatusMethodNotAllowed {
+				t.Fatalf("status = %d, want 405", rec.Code)
+			}
+			if got := rec.Header().Get("Allow"); got != tc.wantAllow {
+				t.Fatalf("Allow = %q, want %q (RFC 9110 requires it on 405)", got, tc.wantAllow)
+			}
+			if env := decodeError(t, rec.Body.String()); env.Error.Code != api.CodeMethodNotAllowed {
+				t.Fatalf("code = %q, want METHOD_NOT_ALLOWED", env.Error.Code)
+			}
+		})
+	}
+}
+
+func TestNotFoundEnvelope(t *testing.T) {
+	h := newStack(t)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/nope", nil))
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", rec.Code)
+	}
+	if env := decodeError(t, rec.Body.String()); env.Error.Code != api.CodeNotFound {
+		t.Fatalf("code = %q, want NOT_FOUND", env.Error.Code)
 	}
 }
 

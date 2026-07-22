@@ -67,6 +67,12 @@ func do(t *testing.T, h http.Handler, req *http.Request) *httptest.ResponseRecor
 		},
 		Status: rec.Code,
 		Header: rec.Header(),
+		// Without this, kin-openapi silently passes statuses the spec does
+		// not document (checkpoint-3 finding). Requests are deliberately NOT
+		// validated: this suite sends intentionally invalid bodies to
+		// exercise the 400 branches, and those must not fail as spec
+		// violations — the contract's enforcement direction is responses.
+		Options: &openapi3filter.Options{IncludeResponseStatus: true},
 	}
 	input.SetBodyBytes(rec.Body.Bytes())
 	if err := openapi3filter.ValidateResponse(context.Background(), input); err != nil {

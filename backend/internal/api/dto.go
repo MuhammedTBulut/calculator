@@ -5,13 +5,18 @@
 // this package may be imported by the domain core.
 package api
 
-// CalculateRequest is the body of POST /api/v1/calculate. Exactly one of
-// Operation (with Operands) or Expression must be present; pointers
-// distinguish "absent" from "empty" so the handler can enforce that shape.
-type CalculateRequest struct {
-	Operation *string   `json:"operation,omitempty"`
-	Operands  []float64 `json:"operands,omitempty"`
-	Expression *string  `json:"expression,omitempty"`
+import "encoding/json"
+
+// rawCalculateRequest is the wire shape of POST /api/v1/calculate before
+// validation. json.RawMessage fields make presence observable — a field is
+// present iff its RawMessage is non-nil — which pointer fields cannot do
+// (both absent and explicit null decode to a nil pointer). The handler then
+// converts each present field strictly, rejecting null and wrong types
+// ("parse, don't validate" applied to the wire format itself).
+type rawCalculateRequest struct {
+	Operation  json.RawMessage `json:"operation"`
+	Operands   json.RawMessage `json:"operands"`
+	Expression json.RawMessage `json:"expression"`
 }
 
 // CalculateResponse is the success body of POST /api/v1/calculate.

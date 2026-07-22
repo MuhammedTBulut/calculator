@@ -3,9 +3,17 @@ info:
   title: Calculator API
   description: >
     Full-stack calculator backend. Errors use a stable machine-readable code
-    envelope; `position` appears only on SYNTAX_ERROR and is a 0-based byte
-    offset into the submitted expression (range [0, len(expression)]; the
-    endpoint means "unexpected end of input").
+    envelope; `position` is present exactly when the code is SYNTAX_ERROR and
+    is a 0-based byte offset into the submitted expression (range
+    [0, len(expression)]; the endpoint means "unexpected end of input").
+
+
+    Transport policy (applies to every route, not repeated per operation): a
+    known route called with an unsupported method returns an enveloped 405
+    METHOD_NOT_ALLOWED with the mandatory Allow header; an unknown path
+    returns an enveloped 404 NOT_FOUND; GET routes also serve HEAD. A request
+    Content-Type other than application/json is rejected with an enveloped
+    415 UNSUPPORTED_MEDIA_TYPE; an absent Content-Type is treated as JSON.
   version: 1.0.0
 servers:
   - url: /
@@ -16,6 +24,7 @@ paths:
       operationId: calculate
       requestBody:
         required: true
+        description: Encoded request body maximum is 1024 bytes.
         content:
           application/json:
             schema:
@@ -23,24 +32,54 @@ paths:
       responses:
         "200":
           description: Successful calculation
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/XRequestID"
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/CalculateResponse"
         "400":
-          description: Malformed request (bad JSON, wrong shape, oversized body)
+          description: Malformed request (bad JSON, wrong shape, null fields, trailing data)
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/XRequestID"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "413":
+          description: Encoded request body exceeds 1024 bytes
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/XRequestID"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "415":
+          description: Content-Type present but not application/json
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/XRequestID"
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
         "422":
           description: Well-formed request whose content fails domain rules
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/XRequestID"
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
         "500":
           description: Internal error (details redacted and logged server-side)
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/XRequestID"
           content:
             application/json:
               schema:
@@ -52,6 +91,9 @@ paths:
       responses:
         "200":
           description: Registered operations, sorted by name
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/XRequestID"
           content:
             application/json:
               schema:
@@ -65,11 +107,22 @@ paths:
       responses:
         "200":
           description: Service is up
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/XRequestID"
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthResponse"
 components:
+  headers:
+    XRequestID:
+      description: >
+        Correlates the response with the server's structured log line. An
+        inbound X-Request-ID is echoed; otherwise one is generated. Exposed
+        to browser scripts via Access-Control-Expose-Headers.
+      schema:
+        type: string
   schemas:
     CalculateRequest:
       description: Exactly one of the two request forms.
@@ -130,26 +183,39 @@ components:
       required: [error]
       properties:
         error:
-          type: object
-          additionalProperties: false
-          required: [code, message]
-          properties:
-            code:
-              type: string
-              enum:
-                - INVALID_REQUEST
-                - DIVISION_BY_ZERO
-                - NEGATIVE_SQRT
-                - INVALID_OPERAND
-                - OVERFLOW
-                - ARITY_MISMATCH
-                - UNKNOWN_OPERATION
-                - SYNTAX_ERROR
-                - UNKNOWN_FUNCTION
-                - INTERNAL
-            message:
-              type: string
-            position:
-              type: integer
-              minimum: 0
-              description: Present only for SYNTAX_ERROR; 0-based byte offset.
+          oneOf:
+            - type: object
+              additionalProperties: false
+              required: [code, message]
+              properties:
+                code:
+                  type: string
+                  enum:
+                    - INVALID_REQUEST
+                    - DIVISION_BY_ZERO
+                    - NEGATIVE_SQRT
+                    - INVALID_OPERAND
+                    - OVERFLOW
+                    - ARITY_MISMATCH
+                    - UNKNOWN_OPERATION
+                    - UNKNOWN_FUNCTION
+                    - REQUEST_TOO_LARGE
+                    - UNSUPPORTED_MEDIA_TYPE
+                    - METHOD_NOT_ALLOWED
+                    - NOT_FOUND
+                    - INTERNAL
+                message:
+                  type: string
+            - type: object
+              additionalProperties: false
+              required: [code, message, position]
+              properties:
+                code:
+                  type: string
+                  enum: [SYNTAX_ERROR]
+                message:
+                  type: string
+                position:
+                  type: integer
+                  minimum: 0
+                  description: 0-based byte offset of the offending character.

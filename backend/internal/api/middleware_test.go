@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -78,6 +79,9 @@ func TestCORSActualRequestCarriesGrant(t *testing.T) {
 	if !strings.Contains(rec.Header().Get("Vary"), "Origin") {
 		t.Fatalf("Vary = %q, want Origin included", rec.Header().Get("Vary"))
 	}
+	if got := rec.Header().Get("Access-Control-Expose-Headers"); !strings.Contains(got, "X-Request-ID") {
+		t.Fatalf("Access-Control-Expose-Headers = %q, want X-Request-ID exposed to scripts", got)
+	}
 }
 
 func TestRequestIDGeneratedAndEchoed(t *testing.T) {
@@ -117,6 +121,39 @@ func TestPanicRecoveryReturnsInternalEnvelope(t *testing.T) {
 	if !strings.Contains(logBuf.String(), "panic recovered") {
 		t.Fatal("panic was not logged")
 	}
+	if !strings.Contains(logBuf.String(), `"request_id"`) {
+		t.Fatal("panic log is missing the request_id correlation")
+	}
+}
+
+// After a partial write the recovery middleware must abandon the response —
+// appending a 500 envelope to committed bytes would corrupt it — and the log
+// must report the status the client actually received, not a phantom 500.
+func TestRecoveryAfterPartialWriteAbandonsResponse(t *testing.T) {
+	var logBuf bytes.Buffer
+	log := slog.New(slog.NewJSONHandler(&logBuf, nil))
+	h := api.WithLogging(log, api.WithRecovery(log, http.HandlerFunc(
+		func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"partial":`))
+			panic("late panic")
+		})))
+
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/health", nil))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want the already-committed 200", rec.Code)
+	}
+	if got := rec.Body.String(); got != `{"partial":` {
+		t.Fatalf("body = %q, want the partial write untouched", got)
+	}
+	if !strings.Contains(logBuf.String(), "panic recovered") {
+		t.Fatal("late panic was not logged")
+	}
+	if !strings.Contains(logBuf.String(), `"status":200`) {
+		t.Fatalf("request log must report the client-visible 200:\n%s", logBuf.String())
+	}
 }
 
 func TestUnexpectedErrorIsRedacted(t *testing.T) {
@@ -139,6 +176,9 @@ func TestUnexpectedErrorIsRedacted(t *testing.T) {
 	}
 	if !strings.Contains(logBuf.String(), "secret database credentials") {
 		t.Fatal("error detail missing from server log")
+	}
+	if !strings.Contains(logBuf.String(), `"request_id"`) {
+		t.Fatal("unhandled-error log is missing the request_id correlation")
 	}
 }
 

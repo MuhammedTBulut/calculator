@@ -19,14 +19,22 @@ const (
 	CodeUnknownOperation = "UNKNOWN_OPERATION"
 	CodeSyntaxError      = "SYNTAX_ERROR"
 	CodeUnknownFunction  = "UNKNOWN_FUNCTION"
+	CodeRequestTooLarge  = "REQUEST_TOO_LARGE"
+	CodeUnsupportedMedia = "UNSUPPORTED_MEDIA_TYPE"
+	CodeMethodNotAllowed = "METHOD_NOT_ALLOWED"
+	CodeNotFound         = "NOT_FOUND"
 	CodeInternal         = "INTERNAL"
 )
 
 // mapDomainError translates a domain error into a status code and envelope
 // body. Messages are canonical short strings per code — never err.Error() —
-// so internal wrapping context cannot leak to clients (OWASP: error leakage).
-// A false second return means the error is not a recognized domain error and
-// must be handled as 500 INTERNAL (redacted, details logged) by the caller.
+// so internal wrapping context cannot leak (OWASP: error leakage). The one
+// deliberate exception is SYNTAX_ERROR, whose message is the parser's Reason:
+// those strings are purpose-built client-facing descriptions ("unexpected
+// ')'"), derived only from single input characters, never from internal
+// wrapping (policy revised at review checkpoint 3). A false third return
+// means the error is unrecognized and must become 500 INTERNAL (redacted,
+// details logged) in the caller.
 func mapDomainError(err error) (int, ErrorBody, bool) {
 	var syn *apperror.SyntaxError
 	if errors.As(err, &syn) {
@@ -34,13 +42,20 @@ func mapDomainError(err error) (int, ErrorBody, bool) {
 		return http.StatusUnprocessableEntity,
 			ErrorBody{Code: CodeSyntaxError, Message: syn.Reason, Position: &pos}, true
 	}
+	if errors.Is(err, apperror.ErrSyntax) {
+		// Defensive: every producer wraps ErrSyntax in a SyntaxError, so this
+		// bare-sentinel path should be unreachable; position 0 keeps the
+		// contract "SYNTAX_ERROR always carries a position" intact.
+		pos := 0
+		return http.StatusUnprocessableEntity,
+			ErrorBody{Code: CodeSyntaxError, Message: "syntax error", Position: &pos}, true
+	}
 
 	for _, m := range []struct {
 		sentinel error
 		code     string
 		message  string
 	}{
-		{apperror.ErrSyntax, CodeSyntaxError, "syntax error"},
 		{apperror.ErrUnknownFunction, CodeUnknownFunction, "unknown function"},
 		{apperror.ErrDivisionByZero, CodeDivisionByZero, "division by zero"},
 		{apperror.ErrNegativeSqrt, CodeNegativeSqrt, "square root of a negative number"},
