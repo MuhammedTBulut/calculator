@@ -68,9 +68,13 @@ func TestTokenizeErrors(t *testing.T) {
 		input   string
 		wantPos int
 	}{
-		{name: "double-dot number", input: "1.2.3", wantPos: 0},
+		// The second dot itself is the offense, not the token start.
+		{name: "double-dot number", input: "1.2.3", wantPos: 3},
+		{name: "adjacent double dots", input: "12..3", wantPos: 3},
 		{name: "lone dot", input: "2+.", wantPos: 2},
 		{name: "unexpected ascii character", input: "2$3", wantPos: 1},
+		{name: "genuine replacement character", input: "2�3", wantPos: 1},
+		{name: "invalid utf-8 byte", input: "2\x803", wantPos: 1},
 		{name: "unexpected unicode character", input: "2×3", wantPos: 1}, // × sign
 		{name: "non-breaking space rejected", input: "1 +2", wantPos: 1},
 	}

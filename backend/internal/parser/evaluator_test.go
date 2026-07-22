@@ -9,8 +9,8 @@ import (
 	"github.com/MuhammedTBulut/calculator/backend/internal/parser"
 )
 
-// newEvaluator wires the real registry, exactly as the composition root will.
-func newEvaluator(t testing.TB) *parser.Evaluator {
+// newRegistry wires the real operations, exactly as the composition root will.
+func newRegistry(t testing.TB) calculator.Registry {
 	t.Helper()
 	reg, err := calculator.NewRegistry(
 		calculator.Add{}, calculator.Subtract{}, calculator.Multiply{},
@@ -20,7 +20,16 @@ func newEvaluator(t testing.TB) *parser.Evaluator {
 	if err != nil {
 		t.Fatalf("NewRegistry: %v", err)
 	}
-	return parser.NewEvaluator(reg)
+	return reg
+}
+
+func newEvaluator(t testing.TB) *parser.Evaluator {
+	t.Helper()
+	eval, err := parser.NewEvaluator(newRegistry(t))
+	if err != nil {
+		t.Fatalf("NewEvaluator: %v", err)
+	}
+	return eval
 }
 
 func TestEvaluate(t *testing.T) {
@@ -65,8 +74,15 @@ func TestEvaluate(t *testing.T) {
 		{name: "sqrt of negative", input: "sqrt(-1)", wantErr: apperror.ErrNegativeSqrt},
 		{name: "overflow propagates", input: "10^308*10", wantErr: apperror.ErrOverflow},
 
-		// Unknown function.
+		// Unknown function — reported regardless of evaluation order, so an
+		// expression's validity never depends on which error fires first.
 		{name: "unknown function", input: "foo(4)", wantErr: apperror.ErrUnknownFunction},
+		{name: "unknown function before domain error", input: "foo(4)+1/0", wantErr: apperror.ErrUnknownFunction},
+		{name: "unknown function after domain error", input: "1/0+foo(4)", wantErr: apperror.ErrUnknownFunction},
+
+		// Permissive chaining — unambiguous, so accepted by design.
+		{name: "double unary minus", input: "--3", want: 3},
+		{name: "chained percent", input: "50%%", want: 0.005},
 
 		// Malformed input.
 		{name: "empty string", input: "", wantErr: apperror.ErrSyntax},
@@ -111,6 +127,7 @@ func TestEvaluateSyntaxPositions(t *testing.T) {
 		{input: "2$3", wantPos: 1},
 		{input: "", wantPos: 0},
 		{input: "sqrt+2", wantPos: 4},
+		{input: "1.2.3", wantPos: 3},
 	}
 
 	for _, tc := range tests {
