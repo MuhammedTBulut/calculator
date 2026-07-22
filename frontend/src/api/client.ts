@@ -9,7 +9,13 @@ import type { CalculateResponse, ErrorEnvelope } from '../types/api'
  */
 export type CalcResult =
   | { ok: true; value: number }
-  | { ok: false; code: string; message: string; position?: number }
+  | {
+      ok: false
+      code: string
+      message: string
+      position?: number
+      retryAfterSeconds?: number
+    }
 
 /**
  * The single seam between the UI and the backend. Components never call
@@ -84,5 +90,15 @@ async function toCalcResult(response: Response): Promise<CalcResult> {
   if (typeof error?.code !== 'string' || typeof error?.message !== 'string') {
     return { ok: false, code: 'BAD_RESPONSE', message: 'server error had no envelope' }
   }
-  return { ok: false, code: error.code, message: error.message, position: error.position }
+  const retryAfter = response.headers.get('Retry-After')
+  const retryAfterSeconds = retryAfter && /^[1-9]\d*$/.test(retryAfter)
+    ? Number.parseInt(retryAfter, 10)
+    : undefined
+  const result: CalcResult = {
+    ok: false,
+    code: error.code,
+    message: error.message,
+    position: error.position,
+  }
+  return retryAfterSeconds === undefined ? result : { ...result, retryAfterSeconds }
 }

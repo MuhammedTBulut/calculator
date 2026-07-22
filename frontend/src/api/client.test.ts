@@ -13,10 +13,10 @@ function stubFetch(impl: () => Promise<Response> | Response) {
   return spy
 }
 
-function jsonResponse(body: unknown, status = 200): Response {
+function jsonResponse(body: unknown, status = 200, headers: Record<string, string> = {}): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...headers },
   })
 }
 
@@ -58,6 +58,22 @@ describe('HttpCalculatorApi', () => {
       code: 'SYNTAX_ERROR',
       message: 'unexpected operator "+"',
       position: 2,
+    })
+  })
+
+  it('carries a valid Retry-After delay from a rate-limit response', async () => {
+    stubFetch(() => jsonResponse(
+      { error: { code: 'RATE_LIMITED', message: 'rate limit exceeded' } },
+      429,
+      { 'Retry-After': '3' },
+    ))
+
+    await expect(new HttpCalculatorApi('http://api.test/api/v1').evaluate('1+1')).resolves.toEqual({
+      ok: false,
+      code: 'RATE_LIMITED',
+      message: 'rate limit exceeded',
+      position: undefined,
+      retryAfterSeconds: 3,
     })
   })
 
