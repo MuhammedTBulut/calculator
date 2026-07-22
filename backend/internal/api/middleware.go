@@ -118,7 +118,7 @@ func WithCORS(origin string, next http.Handler) http.Handler {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			// Without an explicit expose grant, browser scripts cannot read
 			// the echoed request ID.
-			w.Header().Set("Access-Control-Expose-Headers", "X-Request-ID")
+			w.Header().Set("Access-Control-Expose-Headers", "X-Request-ID, Retry-After")
 		}
 		if r.Method == http.MethodOptions {
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")

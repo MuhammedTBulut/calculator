@@ -14,30 +14,73 @@ func discardLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(io.Discard, nil))
 }
 
+func testConfig() config {
+	return config{
+		port:               "8080",
+		corsOrigin:         "http://localhost:5173",
+		rateLimitPerMinute: 60,
+		rateLimitBurst:     20,
+	}
+}
+
 func TestLoadConfigDefaultsAndOverrides(t *testing.T) {
-	cfg := loadConfig()
-	if cfg.port != "8080" || cfg.corsOrigin != "http://localhost:5173" {
-		t.Fatalf("defaults = %+v, want port 8080 and the Vite dev origin", cfg)
+	cfg, err := loadConfig()
+	if err != nil {
+		t.Fatalf("loadConfig defaults: %v", err)
+	}
+	if cfg.port != "8080" || cfg.corsOrigin != "http://localhost:5173" ||
+		cfg.rateLimitPerMinute != 60 || cfg.rateLimitBurst != 20 || cfg.trustProxy {
+		t.Fatalf("defaults = %+v, want local server defaults", cfg)
 	}
 
 	t.Setenv("PORT", "9999")
 	t.Setenv("CORS_ORIGIN", "https://calc.example")
-	cfg = loadConfig()
-	if cfg.port != "9999" || cfg.corsOrigin != "https://calc.example" {
+	t.Setenv("RATE_LIMIT_PER_MINUTE", "120")
+	t.Setenv("RATE_LIMIT_BURST", "30")
+	t.Setenv("TRUST_PROXY", "true")
+	cfg, err = loadConfig()
+	if err != nil {
+		t.Fatalf("loadConfig overrides: %v", err)
+	}
+	if cfg.port != "9999" || cfg.corsOrigin != "https://calc.example" ||
+		cfg.rateLimitPerMinute != 120 || cfg.rateLimitBurst != 30 || !cfg.trustProxy {
 		t.Fatalf("overrides = %+v, want the environment values", cfg)
 	}
 
 	// An empty variable must fall back, not produce an empty setting.
 	t.Setenv("PORT", "")
-	if got := loadConfig().port; got != "8080" {
+	cfg, err = loadConfig()
+	if err != nil {
+		t.Fatalf("loadConfig empty PORT: %v", err)
+	}
+	if got := cfg.port; got != "8080" {
 		t.Fatalf("empty PORT gave %q, want the 8080 fallback", got)
+	}
+}
+
+func TestLoadConfigRejectsInvalidRateLimit(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		key   string
+		value string
+	}{
+		{name: "non numeric rate", key: "RATE_LIMIT_PER_MINUTE", value: "many"},
+		{name: "zero burst", key: "RATE_LIMIT_BURST", value: "0"},
+		{name: "invalid trust proxy", key: "TRUST_PROXY", value: "sometimes"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv(tc.key, tc.value)
+			if _, err := loadConfig(); err == nil {
+				t.Fatalf("%s=%q was accepted", tc.key, tc.value)
+			}
+		})
 	}
 }
 
 // The composition root is the one place the whole stack is assembled, so this
 // exercises it end to end: registry → evaluator → adapter → middleware.
 func TestBuildHandlerServesTheWiredStack(t *testing.T) {
-	cfg := config{port: "8080", corsOrigin: "http://localhost:5173"}
+	cfg := testConfig()
 	handler, err := buildHandler(cfg, discardLogger())
 	if err != nil {
 		t.Fatalf("buildHandler: %v", err)
@@ -85,7 +128,9 @@ func TestBuildHandlerServesTheWiredStack(t *testing.T) {
 }
 
 func TestBuildHandlerAppliesMiddleware(t *testing.T) {
-	handler, err := buildHandler(config{corsOrigin: "http://localhost:5173"}, discardLogger())
+	cfg := testConfig()
+	cfg.rateLimitBurst = 1
+	handler, err := buildHandler(cfg, discardLogger())
 	if err != nil {
 		t.Fatalf("buildHandler: %v", err)
 	}
@@ -101,12 +146,36 @@ func TestBuildHandlerAppliesMiddleware(t *testing.T) {
 	if rec.Header().Get("X-Request-ID") == "" {
 		t.Fatal("logging middleware not wired: no X-Request-ID")
 	}
+
+	for attempt := 1; attempt <= 2; attempt++ {
+		req = httptest.NewRequest(http.MethodPost, "/api/v1/calculate",
+			strings.NewReader(`{"expression":"1+1"}`))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Origin", "http://localhost:5173")
+		rec = httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		if attempt == 1 && rec.Code != http.StatusOK {
+			t.Fatalf("first calculation status = %d, want 200", rec.Code)
+		}
+	}
+	if rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("rate-limited calculation status = %d, want 429", rec.Code)
+	}
+	if rec.Header().Get("Retry-After") == "" {
+		t.Fatal("rate limiter not wired: no Retry-After")
+	}
+	if rec.Header().Get("X-Request-ID") == "" {
+		t.Fatal("rate-limited response bypassed request logging")
+	}
+	if got := rec.Header().Get("Access-Control-Allow-Origin"); got != "http://localhost:5173" {
+		t.Fatalf("rate-limited response bypassed CORS: Allow-Origin = %q", got)
+	}
 }
 
 // The healthcheck flag is what the distroless container invokes, so it must
 // agree with the running server rather than merely compile.
 func TestHealthcheckProbe(t *testing.T) {
-	handler, err := buildHandler(config{}, discardLogger())
+	handler, err := buildHandler(testConfig(), discardLogger())
 	if err != nil {
 		t.Fatalf("buildHandler: %v", err)
 	}
@@ -127,7 +196,7 @@ func TestHealthcheckProbe(t *testing.T) {
 }
 
 func TestHealthEndpointShape(t *testing.T) {
-	handler, err := buildHandler(config{}, discardLogger())
+	handler, err := buildHandler(testConfig(), discardLogger())
 	if err != nil {
 		t.Fatalf("buildHandler: %v", err)
 	}

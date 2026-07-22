@@ -7,6 +7,10 @@ services:
       # API are never legitimate in this topology; keep the allowlist empty of
       # real origins rather than echoing one.
       CORS_ORIGIN: "http://localhost:3000"
+      RATE_LIMIT_PER_MINUTE: "60"
+      RATE_LIMIT_BURST: "20"
+      # nginx overwrites X-Real-IP before forwarding to the private backend.
+      TRUST_PROXY: "true"
     # No published port: the backend is reachable only from the compose
     # network, so nginx is the single entry point.
     expose:

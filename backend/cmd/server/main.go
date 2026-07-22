@@ -8,10 +8,12 @@ import (
 	"context"
 	"errors"
 	"flag"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -21,19 +23,37 @@ import (
 )
 
 // config carries every environment-derived setting.
-// NOTE: plain env vars instead of a config library — two values do not justify
-// a dependency (12-factor config, YAGNI).
+// NOTE: plain env vars instead of a config library keep this small service's
+// startup contract explicit (12-factor config, YAGNI).
 type config struct {
-	port       string
-	corsOrigin string
+	port               string
+	corsOrigin         string
+	rateLimitPerMinute int
+	rateLimitBurst     int
+	trustProxy         bool
 }
 
-func loadConfig() config {
+func loadConfig() (config, error) {
+	rate, err := positiveIntEnv("RATE_LIMIT_PER_MINUTE", 60)
+	if err != nil {
+		return config{}, err
+	}
+	burst, err := positiveIntEnv("RATE_LIMIT_BURST", 20)
+	if err != nil {
+		return config{}, err
+	}
+	trustProxy, err := boolEnv("TRUST_PROXY", false)
+	if err != nil {
+		return config{}, err
+	}
 	return config{
 		port: envOr("PORT", "8080"),
 		// Default matches the Vite dev server so local dev works with zero setup.
-		corsOrigin: envOr("CORS_ORIGIN", "http://localhost:5173"),
-	}
+		corsOrigin:         envOr("CORS_ORIGIN", "http://localhost:5173"),
+		rateLimitPerMinute: rate,
+		rateLimitBurst:     burst,
+		trustProxy:         trustProxy,
+	}, nil
 }
 
 func envOr(key, fallback string) string {
@@ -41,6 +61,24 @@ func envOr(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+func positiveIntEnv(key string, fallback int) (int, error) {
+	raw := envOr(key, strconv.Itoa(fallback))
+	value, err := strconv.Atoi(raw)
+	if err != nil || value <= 0 {
+		return 0, fmt.Errorf("%s must be a positive integer", key)
+	}
+	return value, nil
+}
+
+func boolEnv(key string, fallback bool) (bool, error) {
+	raw := envOr(key, strconv.FormatBool(fallback))
+	value, err := strconv.ParseBool(raw)
+	if err != nil {
+		return false, fmt.Errorf("%s must be true or false", key)
+	}
+	return value, nil
 }
 
 // buildHandler assembles registry → evaluator → HTTP adapter → middleware.
@@ -63,11 +101,19 @@ func buildHandler(cfg config, logger *slog.Logger) (http.Handler, error) {
 	if err != nil {
 		return nil, err
 	}
-	// Logging wraps recovery so panics are logged with their final 500
-	// status; CORS sits innermost, decorating only real route traffic.
+	limiter, err := api.NewRateLimiter(api.RateLimitConfig{
+		RequestsPerMinute: cfg.rateLimitPerMinute,
+		Burst:             cfg.rateLimitBurst,
+		TrustProxy:        cfg.trustProxy,
+	})
+	if err != nil {
+		return nil, err
+	}
+	// Logging wraps recovery so panics are logged with their final 500 status.
+	// CORS wraps the limiter so 429 responses remain readable by the browser.
 	return api.WithLogging(logger,
 		api.WithRecovery(logger,
-			api.WithCORS(cfg.corsOrigin, handler.Routes()))), nil
+			api.WithCORS(cfg.corsOrigin, limiter.Middleware(handler.Routes())))), nil
 }
 
 // healthcheck probes a running instance and exits non-zero if it is not
@@ -93,7 +139,11 @@ func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	slog.SetDefault(logger)
 
-	cfg := loadConfig()
+	cfg, err := loadConfig()
+	if err != nil {
+		logger.Error("invalid configuration", "error", err)
+		os.Exit(1)
+	}
 
 	if *probe {
 		os.Exit(healthcheck(cfg))
