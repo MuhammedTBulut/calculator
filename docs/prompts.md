@@ -347,6 +347,38 @@ settled.
 
 ---
 
+## Prompt 9 — API rate limiting and delivery documentation
+
+> This application is being developed for the stated full-stack calculator
+> assignment. If rate limiting is appropriate in that context, add it. Keep
+> the React/TypeScript and Go architecture clean, maintainable, testable, and
+> aligned with the assignment deliverables; ensure the README contains setup,
+> run instructions, REST examples, and design decisions.
+
+Implementation constraints used for this stage: protect only the calculation
+endpoint; keep health checks available; return an enveloped `429` with
+`Retry-After`; use an in-memory token bucket without a production dependency;
+make the policy and trusted-proxy behavior environment-configurable; update the
+OpenAPI contract, frontend error mapping, tests, Docker configuration, and
+README together.
+
+---
+
+## Prompt 10 — Calculator polish and delivery confidence
+
+> Add the next recommended improvements: native calculator input behavior,
+> repeat-equals, browser-level end-to-end coverage, rate-limit retry UX,
+> accessibility automation, and README presentation. Preserve the existing
+> architecture and responsive design.
+
+Implementation constraints used for this stage: keep all input state in
+`useCalculator`; keep API header parsing in the HTTP adapter; run Playwright
+against the real Go backend; test desktop and mobile Chromium; scan both themes
+for WCAG A/AA issues; add CI artifacts; do not perform an external deployment
+without repository/hosting authorization.
+
+---
+
 ## Appendix — References to cite in README and ADRs
 
 - Cockburn, A. — *Hexagonal Architecture (Ports & Adapters)*, 2005. https://alistair.cockburn.us/hexagonal-architecture/
