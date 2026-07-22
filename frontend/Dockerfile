@@ -19,15 +19,13 @@ FROM nginx:1.27-alpine
 
 COPY --from=build /app/dist /usr/share/nginx/html
 # A *.template file under /etc/nginx/templates is rendered with envsubst by
-# the base image's own docker-entrypoint before nginx starts. The defaults
-# here are the compose service name; platforms that don't join services on a
-# shared network (Render) override both to the backend service's public
-# origin — same image either way, see docs/deployment.md. BACKEND_HOST is
-# separate from BACKEND_ORIGIN (not derived from it) because it becomes a
-# literal proxied Host header, which matters on platforms that route by Host
-# at a shared edge.
+# the base image's own docker-entrypoint before nginx starts. The default
+# here is the compose service name; platforms that don't join services on a
+# shared network (Render) override it to the backend service's public origin
+# — same image either way, see docs/deployment.md. The proxied Host header
+# tracks this automatically via nginx's $proxy_host, so only one variable
+# needs to be set, on either platform.
 ENV BACKEND_ORIGIN=http://backend:8080
-ENV BACKEND_HOST=backend:8080
 COPY nginx.conf.template /etc/nginx/templates/default.conf.template
 COPY security-headers.conf /etc/nginx/snippets/security-headers.conf
 

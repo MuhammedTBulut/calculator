@@ -18,22 +18,24 @@ server {
     # does not join services on a shared network) overrides them to the
     # backend service's public origin.
     #
-    # Host is forwarded as BACKEND_HOST, not $host (the frontend's own
-    # hostname) — deployed on Render this is load-bearing, not cosmetic.
+    # Host is forwarded as $proxy_host — nginx's built-in variable holding
+    # whatever host:port proxy_pass resolved to — not $host (the frontend's
+    # own hostname). Deployed on Render this is load-bearing, not cosmetic:
     # Render's shared edge routes every *.onrender.com request by Host
-    # header; sending the frontend's Host to the backend's origin makes
+    # header, so sending the frontend's Host to the backend's origin makes
     # Render's router treat it as a request FOR the frontend again, which
     # loops until Render's own guard cuts it off with 508 Loop Detected
     # (caught during the first live deploy — invisible in docker-compose,
     # since the Go backend never inspects Host and Docker's network resolves
-    # by container name, not by header).
+    # by container name, not by header). $proxy_host tracks BACKEND_ORIGIN
+    # automatically, so no second variable needs to stay in sync with it.
     location /api/ {
         include /etc/nginx/snippets/security-headers.conf;
 
         proxy_pass ${BACKEND_ORIGIN};
         proxy_ssl_server_name on;
         proxy_http_version 1.1;
-        proxy_set_header Host ${BACKEND_HOST};
+        proxy_set_header Host $proxy_host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
