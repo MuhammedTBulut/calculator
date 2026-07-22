@@ -1,19 +1,41 @@
 package calculator_test
 
 import (
+	"errors"
 	"math"
 	"testing"
 
+	"github.com/MuhammedTBulut/calculator/backend/internal/apperror"
 	"pgregory.net/rapid"
 )
 
-// approxEqual compares with a relative tolerance; exact float equality is the
-// wrong tool once two rounding steps are involved.
+// sentinelOf reduces an error to its apperror classification (nil for
+// success), so properties can assert that two computations fail the same way,
+// not merely that both fail (review log, checkpoint 1).
+func sentinelOf(err error) error {
+	if err == nil {
+		return nil
+	}
+	for _, s := range []error{
+		apperror.ErrDivisionByZero, apperror.ErrNegativeSqrt,
+		apperror.ErrInvalidOperand, apperror.ErrOverflow,
+		apperror.ErrArityMismatch, apperror.ErrUnknownOperation,
+	} {
+		if errors.Is(err, s) {
+			return s
+		}
+	}
+	return err
+}
+
+// approxEqual compares with a relative tolerance of ~4 ulp: divide followed by
+// multiply performs two correctly-rounded operations, so anything beyond a few
+// ulps of drift is an implementation bug, not floating-point noise.
 func approxEqual(a, b float64) bool {
 	if a == b {
 		return true
 	}
-	return math.Abs(a-b) <= 1e-9*math.Max(math.Abs(a), math.Abs(b))
+	return math.Abs(a-b) <= 1e-15*math.Max(math.Abs(a), math.Abs(b))
 }
 
 func TestAddIsCommutative(t *testing.T) {
@@ -23,9 +45,9 @@ func TestAddIsCommutative(t *testing.T) {
 		y := rapid.Float64().Draw(rt, "y")
 		a, errA := reg.Execute("add", x, y)
 		b, errB := reg.Execute("add", y, x)
-		// Both orders must agree on the outcome — value or error alike
-		// (IEEE 754 addition is commutative; overflow is symmetric).
-		if (errA == nil) != (errB == nil) {
+		// IEEE 754 addition is commutative and overflow is symmetric, so both
+		// orders must agree on the exact value or the exact error class.
+		if sentinelOf(errA) != sentinelOf(errB) {
 			t.Fatalf("add(%g,%g) err=%v but add(%g,%g) err=%v", x, y, errA, y, x, errB)
 		}
 		if errA == nil && a != b {
@@ -41,7 +63,7 @@ func TestMultiplyIsCommutative(t *testing.T) {
 		y := rapid.Float64().Draw(rt, "y")
 		a, errA := reg.Execute("multiply", x, y)
 		b, errB := reg.Execute("multiply", y, x)
-		if (errA == nil) != (errB == nil) {
+		if sentinelOf(errA) != sentinelOf(errB) {
 			t.Fatalf("multiply(%g,%g) err=%v but multiply(%g,%g) err=%v", x, y, errA, y, x, errB)
 		}
 		if errA == nil && a != b {

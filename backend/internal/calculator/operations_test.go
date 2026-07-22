@@ -63,6 +63,10 @@ func TestExecute(t *testing.T) {
 		{name: "divide by zero", op: "divide", operands: []float64{1, 0}, wantErr: apperror.ErrDivisionByZero},
 		{name: "zero divided by zero", op: "divide", operands: []float64{0, 0}, wantErr: apperror.ErrDivisionByZero},
 		{name: "sqrt of negative", op: "sqrt", operands: []float64{-1}, wantErr: apperror.ErrNegativeSqrt},
+		// power(±0, negative) is a pole (1/0), not overflow — review log, checkpoint 1.
+		{name: "power of zero to negative integer", op: "power", operands: []float64{0, -1}, wantErr: apperror.ErrDivisionByZero},
+		{name: "power of zero to negative fraction", op: "power", operands: []float64{0, -0.5}, wantErr: apperror.ErrDivisionByZero},
+		{name: "power of negative zero to negative", op: "power", operands: []float64{math.Copysign(0, -1), -3}, wantErr: apperror.ErrDivisionByZero},
 
 		// Non-finite operands.
 		{name: "NaN operand", op: "add", operands: []float64{math.NaN(), 1}, wantErr: apperror.ErrInvalidOperand},
@@ -74,7 +78,6 @@ func TestExecute(t *testing.T) {
 		{name: "multiply overflows", op: "multiply", operands: []float64{math.MaxFloat64, 2}, wantErr: apperror.ErrOverflow},
 		{name: "divide overflows", op: "divide", operands: []float64{math.MaxFloat64, 0.5}, wantErr: apperror.ErrOverflow},
 		{name: "power overflows", op: "power", operands: []float64{1e200, 2}, wantErr: apperror.ErrOverflow},
-		{name: "power of zero to negative overflows", op: "power", operands: []float64{0, -1}, wantErr: apperror.ErrOverflow},
 
 		// Results outside the mathematical domain.
 		{name: "power of negative base with fractional exponent", op: "power",
@@ -104,6 +107,30 @@ func TestExecute(t *testing.T) {
 			}
 			if got != tc.want {
 				t.Fatalf("Execute(%q, %v) = %g, want %g", tc.op, tc.operands, got, tc.want)
+			}
+		})
+	}
+}
+
+// The built-ins are exported and directly callable, so they must stay
+// defensive even without the registry's Execute-level enforcement.
+func TestBuiltinsValidateWhenCalledDirectly(t *testing.T) {
+	ops := []calculator.Operation{
+		calculator.Add{}, calculator.Subtract{}, calculator.Multiply{},
+		calculator.Divide{}, calculator.Power{}, calculator.Sqrt{},
+		calculator.Percent{},
+	}
+	for _, op := range ops {
+		t.Run(op.Name()+" rejects missing operands", func(t *testing.T) {
+			if _, err := op.Apply(); !errors.Is(err, apperror.ErrArityMismatch) {
+				t.Fatalf("%s.Apply() error = %v, want ErrArityMismatch", op.Name(), err)
+			}
+		})
+		t.Run(op.Name()+" rejects NaN operand", func(t *testing.T) {
+			operands := make([]float64, op.Arity())
+			operands[0] = math.NaN()
+			if _, err := op.Apply(operands...); !errors.Is(err, apperror.ErrInvalidOperand) {
+				t.Fatalf("%s.Apply(NaN, ...) error = %v, want ErrInvalidOperand", op.Name(), err)
 			}
 		})
 	}
