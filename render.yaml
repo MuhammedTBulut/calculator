@@ -1,0 +1,48 @@
+# Render Blueprint. Render over Fly.io: the CLI was already installed and
+# authenticated in this environment, so it needed no new account or secret
+# to exercise (ADR-004 territory — pick the option that doesn't add
+# infrastructure for its own sake).
+#
+# Both services are Docker web services, built from the same Dockerfiles
+# docker-compose uses. The frontend image needs one thing compose provides
+# for free — a route to the backend — which it gets here via the
+# BACKEND_ORIGIN env var (frontend/Dockerfile bakes in the compose-network
+# default; this overrides it to the backend service's public origin, since
+# Render does not join services on a private network the way Compose does).
+#
+# The URLs below assume the service names are available on onrender.com; if
+# Render suffixes a name on creation, update BACKEND_ORIGIN / CORS_ORIGIN and
+# redeploy (see docs/deployment.md). render.yaml itself is documentation of
+# the deployed shape — services were created via `render services create`
+# because the CLI has no blueprint-apply command; see docs/deployment.md.
+services:
+  - name: sezzle-calculator-api
+    type: web
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: CORS_ORIGIN
+        value: https://sezzle-calculator.onrender.com
+      - key: RATE_LIMIT_PER_MINUTE
+        value: "60"
+      - key: RATE_LIMIT_BURST
+        value: "20"
+      # NOTE: left false deliberately. Render's edge proxy behavior for
+      # X-Real-IP is undocumented; trusting it blind risks every visitor
+      # sharing one bucket keyed to Render's load balancer instead of their
+      # own IP — worse than the already-disclosed per-process limitation.
+      - key: TRUST_PROXY
+        value: "false"
+
+  - name: sezzle-calculator
+    type: web
+    runtime: docker
+    dockerfilePath: ./frontend/Dockerfile
+    dockerContext: ./frontend
+    plan: free
+    envVars:
+      - key: BACKEND_ORIGIN
+        value: https://sezzle-calculator-api.onrender.com

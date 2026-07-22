@@ -26,8 +26,15 @@ Monorepo layout: `backend/`, `frontend/`, `docs/`, `docker-compose.yml` at root.
 
 1. `src/api/` exposes a `CalculatorApi` interface; components never call `fetch`
    directly.
-2. All calculator state and logic lives in the `useCalculator` hook; components
-   under `src/components/` are presentational (props in, JSX out).
+2. All *calculation* state and logic lives in the `useCalculator` hook: the
+   expression buffer, submission, history, errors, and retry. Components under
+   `src/components/` receive it as props and must not duplicate or reinterpret
+   it. They may own strictly view-local state that cannot exist outside the
+   view — DOM measurement and press animation — and cross-cutting UI state
+   (theme, key feedback) belongs in its own hook, not in a component.
+   (Refined at review checkpoint 5, which found the original "props in, JSX
+   out" wording no longer described `Display`'s width measurement; see
+   `docs/reviews.md`.)
 3. No state-management libraries (YAGNI at this scale).
 
 ## Quality bar

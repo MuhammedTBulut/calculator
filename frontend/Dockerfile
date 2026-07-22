@@ -18,7 +18,15 @@ RUN npm run build
 FROM nginx:1.27-alpine
 
 COPY --from=build /app/dist /usr/share/nginx/html
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+# A *.template file under /etc/nginx/templates is rendered with envsubst by
+# the base image's own docker-entrypoint before nginx starts. The default
+# here is the compose service name; platforms that don't join services on a
+# shared network (Render) override it to the backend service's public origin
+# — same image either way, see docs/deployment.md. The proxied Host header
+# tracks this automatically via nginx's $proxy_host, so only one variable
+# needs to be set, on either platform.
+ENV BACKEND_ORIGIN=http://backend:8080
+COPY nginx.conf.template /etc/nginx/templates/default.conf.template
 COPY security-headers.conf /etc/nginx/snippets/security-headers.conf
 
 EXPOSE 80
