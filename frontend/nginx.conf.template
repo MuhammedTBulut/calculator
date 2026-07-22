@@ -12,18 +12,28 @@ server {
     # API calls stay same-origin from the browser's perspective; nginx forwards
     # them to BACKEND_ORIGIN, which the base image's docker-entrypoint fills
     # in via envsubst at container start (nginx's own request-time variables
-    # like $host below are not shell env vars, so envsubst leaves them
+    # like $remote_addr below are not shell env vars, so envsubst leaves them
     # alone — only names actually present in the environment are replaced).
-    # The Dockerfile bakes in the compose-network default; Render (which
-    # does not join services on a shared network) overrides it to the
+    # The Dockerfile bakes in the compose-network defaults; Render (which
+    # does not join services on a shared network) overrides them to the
     # backend service's public origin.
+    #
+    # Host is forwarded as BACKEND_HOST, not $host (the frontend's own
+    # hostname) — deployed on Render this is load-bearing, not cosmetic.
+    # Render's shared edge routes every *.onrender.com request by Host
+    # header; sending the frontend's Host to the backend's origin makes
+    # Render's router treat it as a request FOR the frontend again, which
+    # loops until Render's own guard cuts it off with 508 Loop Detected
+    # (caught during the first live deploy — invisible in docker-compose,
+    # since the Go backend never inspects Host and Docker's network resolves
+    # by container name, not by header).
     location /api/ {
         include /etc/nginx/snippets/security-headers.conf;
 
         proxy_pass ${BACKEND_ORIGIN};
         proxy_ssl_server_name on;
         proxy_http_version 1.1;
-        proxy_set_header Host $host;
+        proxy_set_header Host ${BACKEND_HOST};
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
