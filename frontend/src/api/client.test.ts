@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { HttpCalculatorApi, warmBackend } from './client'
+import { HttpCalculatorApi, waitForBackend } from './client'
 
 /**
  * These are the one place fetch is stubbed: this class exists to wrap fetch,
@@ -26,11 +26,15 @@ afterEach(() => {
 })
 
 describe('HttpCalculatorApi', () => {
-  it('warms the backend without blocking startup', async () => {
+  it('resolves the readiness gate when the backend is healthy', async () => {
     const spy = stubFetch(() => jsonResponse({ status: 'ok' }))
+    const controller = new AbortController()
 
-    expect(warmBackend()).toBeUndefined()
-    expect(spy).toHaveBeenCalledWith('/api/health', { cache: 'no-store' })
+    await expect(waitForBackend(controller.signal)).resolves.toBeUndefined()
+    expect(spy).toHaveBeenCalledWith('/api/health', {
+      cache: 'no-store',
+      signal: controller.signal,
+    })
   })
 
   it('posts the expression to the configured base URL and unwraps the result', async () => {
