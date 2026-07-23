@@ -30,7 +30,9 @@ export function Bootstrap({ api, themeStore, waitUntilReady }: BootstrapProps) {
       <main className="startup" aria-busy="true" aria-live="polite">
         <img className="startup__logo" src="/sezzle-logo.svg" alt="Sezzle" />
         <div className="startup__spinner" aria-hidden="true" />
-        <p className="startup__status">Calculator is getting ready…</p>
+        <p className="startup__status">
+          The calculator server is waking up. This can take up to a minute.
+        </p>
       </main>
     )
   }
