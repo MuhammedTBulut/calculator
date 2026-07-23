@@ -27,8 +27,21 @@ export interface CalculatorApi {
   evaluate(expression: string): Promise<CalcResult>
 }
 
-/** Milliseconds before an in-flight request is abandoned as TIMEOUT. */
-const defaultTimeoutMs = 5000
+/**
+ * Render free services can need close to a minute to wake from an idle state.
+ * Keep one deadline across the initial request and its cold-start retry.
+ */
+const defaultTimeoutMs = 60_000
+
+/** Gateway statuses Render can emit transiently while the backend wakes. */
+const retryableGatewayStatuses = new Set([502, 503, 504])
+
+/** Starts the independently deployed backend without delaying first render. */
+export function warmBackend(): void {
+  void fetch('/api/health', { cache: 'no-store' }).catch(() => {
+    // Best effort only; evaluate() owns user-visible retry/error handling.
+  })
+}
 
 /** HTTP implementation of CalculatorApi against the Go backend. */
 export class HttpCalculatorApi implements CalculatorApi {
@@ -47,12 +60,20 @@ export class HttpCalculatorApi implements CalculatorApi {
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), this.timeoutMs)
     try {
-      const response = await fetch(`${this.baseUrl}/calculate`, {
+      const request = {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ expression }),
         signal: controller.signal,
-      })
+      }
+      let response = await fetch(`${this.baseUrl}/calculate`, request)
+
+      // Render may answer the first proxied request with an HTML 502/503 page
+      // while a sleeping backend is starting. The failed POST never reached
+      // the application, so one retry is safe for this pure calculation API.
+      if (retryableGatewayStatuses.has(response.status)) {
+        response = await fetch(`${this.baseUrl}/calculate`, request)
+      }
       return await toCalcResult(response)
     } catch (err) {
       // AbortError is our own timeout firing; anything else is the network.
@@ -75,6 +96,9 @@ async function toCalcResult(response: Response): Promise<CalcResult> {
   try {
     body = await response.json()
   } catch {
+    if (response.status >= 500) {
+      return { ok: false, code: 'INTERNAL', message: 'server gateway failure' }
+    }
     return { ok: false, code: 'BAD_RESPONSE', message: 'server response was not JSON' }
   }
 
