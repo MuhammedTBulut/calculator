@@ -39,15 +39,26 @@ const retryableGatewayStatuses = new Set([502, 503, 504])
 /** A cold Render service commonly needs several seconds before it accepts traffic. */
 const defaultGatewayRetryDelayMs = 2_000
 const maxGatewayAttempts = 10
+const renderFrontendHost = 'sezzle-calculator.onrender.com'
+const renderBackendHealthUrl = 'https://sezzle-calculator-api.onrender.com/health'
+
+function readinessHealthUrl(): string {
+  return window.location.hostname === renderFrontendHost
+    ? renderBackendHealthUrl
+    : '/api/health'
+}
 
 /**
  * Resolves only after the backend reports healthy. The application bootstrap
  * uses this as a gate, so calculator controls cannot appear before they work.
  */
-export async function waitForBackend(signal: AbortSignal): Promise<void> {
+export async function waitForBackend(
+  signal: AbortSignal,
+  healthUrl: string = readinessHealthUrl(),
+): Promise<void> {
   while (!signal.aborted) {
     try {
-      const response = await fetch('/api/health', {
+      const response = await fetch(healthUrl, {
         cache: 'no-store',
         signal,
       })

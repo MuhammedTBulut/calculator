@@ -37,6 +37,18 @@ describe('HttpCalculatorApi', () => {
     })
   })
 
+  it('can wake a deployed backend through its public health endpoint', async () => {
+    const spy = stubFetch(() => jsonResponse({ status: 'ok' }))
+    const controller = new AbortController()
+    const healthUrl = 'https://api.example.com/health'
+
+    await expect(waitForBackend(controller.signal, healthUrl)).resolves.toBeUndefined()
+    expect(spy).toHaveBeenCalledWith(healthUrl, {
+      cache: 'no-store',
+      signal: controller.signal,
+    })
+  })
+
   it('posts the expression to the configured base URL and unwraps the result', async () => {
     const spy = stubFetch(() => jsonResponse({ result: 14 }))
     const api = new HttpCalculatorApi('http://api.test/api/v1')
