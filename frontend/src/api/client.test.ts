@@ -112,13 +112,13 @@ describe('HttpCalculatorApi', () => {
     })
   })
 
-  it('retries a transient Render gateway response once', async () => {
+  it('retries a transient Render gateway response after a boot delay', async () => {
     const spy = vi.fn<typeof fetch>()
       .mockResolvedValueOnce(new Response('<html>502</html>', { status: 502 }))
       .mockResolvedValueOnce(jsonResponse({ result: 144 }))
     vi.stubGlobal('fetch', spy)
 
-    await expect(new HttpCalculatorApi('http://api.test/api/v1').evaluate('12*12'))
+    await expect(new HttpCalculatorApi('http://api.test/api/v1', 60_000, 0).evaluate('12*12'))
       .resolves.toEqual({ ok: true, value: 144 })
     expect(spy).toHaveBeenCalledTimes(2)
   })
@@ -126,12 +126,12 @@ describe('HttpCalculatorApi', () => {
   it('reports a persistent non-JSON gateway failure as INTERNAL', async () => {
     const spy = stubFetch(() => new Response('<html>502</html>', { status: 502 }))
 
-    await expect(new HttpCalculatorApi('http://api.test/api/v1').evaluate('1+1')).resolves.toEqual({
+    await expect(new HttpCalculatorApi('http://api.test/api/v1', 60_000, 0).evaluate('1+1')).resolves.toEqual({
       ok: false,
       code: 'INTERNAL',
       message: 'server gateway failure',
     })
-    expect(spy).toHaveBeenCalledTimes(2)
+    expect(spy).toHaveBeenCalledTimes(10)
   })
 
   it('rejects responses that do not match the documented contract', async () => {
