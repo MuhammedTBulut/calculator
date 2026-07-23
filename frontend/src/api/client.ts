@@ -40,11 +40,28 @@ const retryableGatewayStatuses = new Set([502, 503, 504])
 const defaultGatewayRetryDelayMs = 2_000
 const maxGatewayAttempts = 10
 
-/** Starts the independently deployed backend without delaying first render. */
-export function warmBackend(): void {
-  void fetch('/api/health', { cache: 'no-store' }).catch(() => {
-    // Best effort only; evaluate() owns user-visible retry/error handling.
-  })
+/**
+ * Resolves only after the backend reports healthy. The application bootstrap
+ * uses this as a gate, so calculator controls cannot appear before they work.
+ */
+export async function waitForBackend(signal: AbortSignal): Promise<void> {
+  while (!signal.aborted) {
+    try {
+      const response = await fetch('/api/health', {
+        cache: 'no-store',
+        signal,
+      })
+      if (response.ok) {
+        return
+      }
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        throw err
+      }
+    }
+    await delay(defaultGatewayRetryDelayMs, signal)
+  }
+  throw new DOMException('aborted', 'AbortError')
 }
 
 /** HTTP implementation of CalculatorApi against the Go backend. */
@@ -103,6 +120,10 @@ export class HttpCalculatorApi implements CalculatorApi {
 
 function delay(milliseconds: number, signal: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
+    if (signal.aborted) {
+      reject(new DOMException('aborted', 'AbortError'))
+      return
+    }
     const timer = window.setTimeout(resolve, milliseconds)
     signal.addEventListener('abort', () => {
       window.clearTimeout(timer)
