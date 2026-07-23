@@ -36,6 +36,10 @@ const defaultTimeoutMs = 60_000
 /** Gateway statuses Render can emit transiently while the backend wakes. */
 const retryableGatewayStatuses = new Set([502, 503, 504])
 
+/** A cold Render service commonly needs several seconds before it accepts traffic. */
+const defaultGatewayRetryDelayMs = 2_000
+const maxGatewayAttempts = 10
+
 /** Starts the independently deployed backend without delaying first render. */
 export function warmBackend(): void {
   void fetch('/api/health', { cache: 'no-store' }).catch(() => {
@@ -47,13 +51,16 @@ export function warmBackend(): void {
 export class HttpCalculatorApi implements CalculatorApi {
   private readonly baseUrl: string
   private readonly timeoutMs: number
+  private readonly gatewayRetryDelayMs: number
 
   constructor(
     baseUrl: string = import.meta.env.VITE_API_BASE_URL ?? '/api/v1',
     timeoutMs: number = defaultTimeoutMs,
+    gatewayRetryDelayMs: number = defaultGatewayRetryDelayMs,
   ) {
     this.baseUrl = baseUrl.replace(/\/$/, '')
     this.timeoutMs = timeoutMs
+    this.gatewayRetryDelayMs = gatewayRetryDelayMs
   }
 
   async evaluate(expression: string): Promise<CalcResult> {
@@ -66,13 +73,20 @@ export class HttpCalculatorApi implements CalculatorApi {
         body: JSON.stringify({ expression }),
         signal: controller.signal,
       }
-      let response = await fetch(`${this.baseUrl}/calculate`, request)
-
-      // Render may answer the first proxied request with an HTML 502/503 page
-      // while a sleeping backend is starting. The failed POST never reached
-      // the application, so one retry is safe for this pure calculation API.
-      if (retryableGatewayStatuses.has(response.status)) {
+      let response: Response
+      for (let attempt = 1; ; attempt++) {
         response = await fetch(`${this.baseUrl}/calculate`, request)
+        if (
+          !retryableGatewayStatuses.has(response.status)
+          || attempt >= maxGatewayAttempts
+        ) {
+          break
+        }
+
+        // The failed POST never reached the application, so retrying this
+        // pure calculation is safe. Spacing attempts gives a sleeping Render
+        // instance time to boot instead of exhausting retries immediately.
+        await delay(this.gatewayRetryDelayMs, controller.signal)
       }
       return await toCalcResult(response)
     } catch (err) {
@@ -85,6 +99,16 @@ export class HttpCalculatorApi implements CalculatorApi {
       clearTimeout(timer)
     }
   }
+}
+
+function delay(milliseconds: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const timer = window.setTimeout(resolve, milliseconds)
+    signal.addEventListener('abort', () => {
+      window.clearTimeout(timer)
+      reject(new DOMException('aborted', 'AbortError'))
+    }, { once: true })
+  })
 }
 
 /**
