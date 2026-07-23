@@ -29,12 +29,20 @@ describe('Bootstrap', () => {
       />,
     )
 
-    expect(screen.getByText('Calculator is getting ready…')).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        'The calculator server is waking up. This can take up to a minute.',
+      ),
+    ).toBeInTheDocument()
     expect(screen.queryByRole('main', { name: 'calculator' })).not.toBeInTheDocument()
 
     await act(async () => markReady?.())
 
     expect(screen.getByRole('main', { name: 'calculator' })).toBeInTheDocument()
-    expect(screen.queryByText('Calculator is getting ready…')).not.toBeInTheDocument()
+    expect(
+      screen.queryByText(
+        'The calculator server is waking up. This can take up to a minute.',
+      ),
+    ).not.toBeInTheDocument()
   })
 })
