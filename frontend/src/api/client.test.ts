@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { HttpCalculatorApi } from './client'
+import { HttpCalculatorApi, warmBackend } from './client'
 
 /**
  * These are the one place fetch is stubbed: this class exists to wrap fetch,
@@ -26,6 +26,13 @@ afterEach(() => {
 })
 
 describe('HttpCalculatorApi', () => {
+  it('warms the backend without blocking startup', async () => {
+    const spy = stubFetch(() => jsonResponse({ status: 'ok' }))
+
+    expect(warmBackend()).toBeUndefined()
+    expect(spy).toHaveBeenCalledWith('/api/health', { cache: 'no-store' })
+  })
+
   it('posts the expression to the configured base URL and unwraps the result', async () => {
     const spy = stubFetch(() => jsonResponse({ result: 14 }))
     const api = new HttpCalculatorApi('http://api.test/api/v1')
@@ -103,6 +110,28 @@ describe('HttpCalculatorApi', () => {
       code: 'TIMEOUT',
       message: 'request timed out',
     })
+  })
+
+  it('retries a transient Render gateway response once', async () => {
+    const spy = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response('<html>502</html>', { status: 502 }))
+      .mockResolvedValueOnce(jsonResponse({ result: 144 }))
+    vi.stubGlobal('fetch', spy)
+
+    await expect(new HttpCalculatorApi('http://api.test/api/v1').evaluate('12*12'))
+      .resolves.toEqual({ ok: true, value: 144 })
+    expect(spy).toHaveBeenCalledTimes(2)
+  })
+
+  it('reports a persistent non-JSON gateway failure as INTERNAL', async () => {
+    const spy = stubFetch(() => new Response('<html>502</html>', { status: 502 }))
+
+    await expect(new HttpCalculatorApi('http://api.test/api/v1').evaluate('1+1')).resolves.toEqual({
+      ok: false,
+      code: 'INTERNAL',
+      message: 'server gateway failure',
+    })
+    expect(spy).toHaveBeenCalledTimes(2)
   })
 
   it('rejects responses that do not match the documented contract', async () => {
